@@ -40,7 +40,7 @@ class App(tk.Tk):
         self.filtros_label.pack(fill="x")
 
     def _build_table(self):
-        cols = ("nombre", "contacto", "estado", "fecha", "notas")
+        cols = ("nombre", "contacto", "estado", "fecha", "recomendado_por", "notas")
         frame = tk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
@@ -50,10 +50,11 @@ class App(tk.Tk):
             "contacto": ("Contacto", 160),
             "estado": ("Estado", 130),
             "fecha": ("Última actualización", 150),
-            "notas": ("Notas", 280),
+            "recomendado_por": ("Recomendado por", 150),
+            "notas": ("Notas", 230),
         }
         for c, (label, width) in headers.items():
-            self.tree.heading(c, text=label)
+            self.tree.heading(c, text=label, anchor="w")
             self.tree.column(c, width=width, anchor="w")
 
         vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
@@ -81,7 +82,14 @@ class App(tk.Tk):
                 "",
                 "end",
                 iid=str(c.id),
-                values=(c.nombre, c.contacto, c.estado_nombre, c.fecha_actualizacion, c.notas),
+                values=(
+                    c.nombre,
+                    c.contacto,
+                    c.estado_nombre,
+                    c.fecha_actualizacion,
+                    c.recomendado_por,
+                    c.notas,
+                ),
                 tags=(tag,),
             )
         self._clientes_actuales = clientes

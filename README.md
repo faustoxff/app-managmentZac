@@ -34,11 +34,22 @@ pyinstaller --onefile --windowed --name GestorClientes main.py
 
 El ejecutable queda en `dist/GestorClientes.exe`. No necesita Python instalado en la máquina destino.
 
+### Generar el .exe sin tener Windows (GitHub Actions)
+
+PyInstaller no hace cross-compile: un build corrido en Linux genera un binario de Linux, no un
+`.exe`. El workflow en `.github/workflows/build.yml` resuelve esto compilando en runners de
+GitHub (Windows y Linux) cada vez que se hace push a `main`, o manualmente desde la pestaña
+"Actions" del repo ("Run workflow").
+
+Los ejecutables generados quedan como *artifacts* de esa ejecución (pestaña Actions → el run
+correspondiente → sección Artifacts), listos para descargar sin necesitar Windows en la máquina
+local.
+
 ## Funcionalidad
 
 - Alta, edición, borrado y cambio de estado de clientes.
 - Estados configurables (nombre y color) desde el botón "Estados".
 - Filtros por estado, rango de fechas y texto libre (nombre/notas).
-- Importar/exportar clientes en CSV (columnas: `nombre, contacto, estado, notas`).
+- Importar/exportar clientes en CSV (columnas: `nombre, contacto, estado, notas, recomendado_por`).
   La importación tolera columnas faltantes o filas incompletas: reporta errores por fila
   sin interrumpir el resto de la carga.

@@ -1,0 +1,42 @@
+name: Build ejecutables
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Generar .exe
+        run: pyinstaller --onefile --windowed --name GestorClientes main.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GestorClientes-windows
+          path: dist/GestorClientes.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar Tkinter y dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+          pip install -r requirements.txt
+      - name: Generar binario
+        run: pyinstaller --onefile --name GestorClientes main.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GestorClientes-linux
+          path: dist/GestorClientes

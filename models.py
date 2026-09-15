@@ -18,6 +18,7 @@ class Cliente:
     estado_id: int
     fecha_actualizacion: str
     notas: str = ""
+    recomendado_por: str = ""
     # Campos de conveniencia, se rellenan al leer con JOIN
     estado_nombre: str = ""
     estado_color: str = "#808080"

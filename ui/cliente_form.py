@@ -46,14 +46,18 @@ class ClienteForm(tk.Toplevel):
             self.estado_var.set(nombres_estados[0])
         self.estado_combo.grid(row=2, column=1, **pad)
 
-        tk.Label(self, text="Notas").grid(row=3, column=0, sticky="nw", **pad)
+        tk.Label(self, text="Recomendado por").grid(row=3, column=0, sticky="w", **pad)
+        self.recomendado_var = tk.StringVar(value=cliente.recomendado_por if cliente else "")
+        tk.Entry(self, textvariable=self.recomendado_var, width=40).grid(row=3, column=1, **pad)
+
+        tk.Label(self, text="Notas").grid(row=4, column=0, sticky="nw", **pad)
         self.notas_text = tk.Text(self, width=40, height=6)
         if cliente:
             self.notas_text.insert("1.0", cliente.notas)
-        self.notas_text.grid(row=3, column=1, **pad)
+        self.notas_text.grid(row=4, column=1, **pad)
 
         btn_frame = tk.Frame(self)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=10)
         tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=5)
 
@@ -64,12 +68,13 @@ class ClienteForm(tk.Toplevel):
             return
         contacto = self.contacto_var.get().strip()
         notas = self.notas_text.get("1.0", "end").strip()
+        recomendado_por = self.recomendado_var.get().strip()
         estado_id = next(e.id for e in self.estados if e.nombre == self.estado_var.get())
 
         if self.cliente:
-            db.actualizar_cliente(self.cliente.id, nombre, contacto, estado_id, notas)
+            db.actualizar_cliente(self.cliente.id, nombre, contacto, estado_id, notas, recomendado_por)
         else:
-            db.crear_cliente(nombre, contacto, estado_id, notas)
+            db.crear_cliente(nombre, contacto, estado_id, notas, recomendado_por)
 
         self.on_saved()
         self.destroy()

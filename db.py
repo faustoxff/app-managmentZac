@@ -50,10 +50,14 @@ def init_db() -> None:
                 contacto TEXT,
                 estado_id INTEGER NOT NULL REFERENCES estados(id) ON DELETE RESTRICT,
                 fecha_actualizacion TEXT NOT NULL,
-                notas TEXT
+                notas TEXT,
+                recomendado_por TEXT
             )
             """
         )
+        columnas = {r["name"] for r in conn.execute("PRAGMA table_info(clientes)").fetchall()}
+        if "recomendado_por" not in columnas:
+            conn.execute("ALTER TABLE clientes ADD COLUMN recomendado_por TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_estado ON clientes(estado_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_fecha ON clientes(fecha_actualizacion)")
 
@@ -116,6 +120,7 @@ def _row_to_cliente(r: sqlite3.Row) -> Cliente:
         estado_id=r["estado_id"],
         fecha_actualizacion=r["fecha_actualizacion"],
         notas=r["notas"] or "",
+        recomendado_por=r["recomendado_por"] or "",
         estado_nombre=r["estado_nombre"],
         estado_color=r["estado_color"],
     )
@@ -144,9 +149,9 @@ def listar_clientes(
         query += " AND c.fecha_actualizacion <= ?"
         params.append(fecha_hasta + "T23:59:59")
     if texto:
-        query += " AND (c.nombre LIKE ? OR c.notas LIKE ?)"
+        query += " AND (c.nombre LIKE ? OR c.notas LIKE ? OR c.recomendado_por LIKE ?)"
         like = f"%{texto}%"
-        params.extend([like, like])
+        params.extend([like, like, like])
     query += " ORDER BY c.fecha_actualizacion DESC"
 
     with get_conn() as conn:
@@ -154,24 +159,31 @@ def listar_clientes(
         return [_row_to_cliente(r) for r in rows]
 
 
-def crear_cliente(nombre: str, contacto: str, estado_id: int, notas: str = "") -> int:
+def crear_cliente(
+    nombre: str, contacto: str, estado_id: int, notas: str = "", recomendado_por: str = ""
+) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO clientes (nombre, contacto, estado_id, fecha_actualizacion, notas) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (nombre, contacto, estado_id, _now_iso(), notas),
+            "INSERT INTO clientes (nombre, contacto, estado_id, fecha_actualizacion, notas, recomendado_por) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (nombre, contacto, estado_id, _now_iso(), notas, recomendado_por),
         )
         return cur.lastrowid
 
 
 def actualizar_cliente(
-    cliente_id: int, nombre: str, contacto: str, estado_id: int, notas: str
+    cliente_id: int,
+    nombre: str,
+    contacto: str,
+    estado_id: int,
+    notas: str,
+    recomendado_por: str = "",
 ) -> None:
     with get_conn() as conn:
         conn.execute(
             "UPDATE clientes SET nombre = ?, contacto = ?, estado_id = ?, "
-            "fecha_actualizacion = ?, notas = ? WHERE id = ?",
-            (nombre, contacto, estado_id, _now_iso(), notas, cliente_id),
+            "fecha_actualizacion = ?, notas = ?, recomendado_por = ? WHERE id = ?",
+            (nombre, contacto, estado_id, _now_iso(), notas, recomendado_por, cliente_id),
         )
 
 
@@ -190,12 +202,15 @@ def eliminar_cliente(cliente_id: int) -> None:
 
 # ---------- CSV ----------
 
-CSV_COLUMNAS = ["nombre", "contacto", "estado", "notas"]
+CSV_COLUMNAS = ["nombre", "contacto", "estado", "notas", "recomendado_por"]
 
 
 def exportar_csv(path: str, clientes: Iterable[Cliente]) -> None:
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=["nombre", "contacto", "estado", "fecha_actualizacion", "notas"])
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["nombre", "contacto", "estado", "fecha_actualizacion", "notas", "recomendado_por"],
+        )
         writer.writeheader()
         for c in clientes:
             writer.writerow(
@@ -205,6 +220,7 @@ def exportar_csv(path: str, clientes: Iterable[Cliente]) -> None:
                     "estado": c.estado_nombre,
                     "fecha_actualizacion": c.fecha_actualizacion,
                     "notas": c.notas,
+                    "recomendado_por": c.recomendado_por,
                 }
             )
 
@@ -246,13 +262,14 @@ def importar_csv(path: str) -> tuple[int, list[str]]:
                 continue
             contacto = (row.get("contacto") or "").strip()
             notas = (row.get("notas") or "").strip()
+            recomendado_por = (row.get("recomendado_por") or "").strip()
             estado_txt = (row.get("estado") or "").strip().lower()
             estado_id = estados.get(estado_txt, estado_default_id)
             if estado_id is None:
                 errores.append(f"Fila {i}: no hay estados configurados, se omite.")
                 continue
             try:
-                crear_cliente(nombre, contacto, estado_id, notas)
+                crear_cliente(nombre, contacto, estado_id, notas, recomendado_por)
                 importados += 1
             except Exception as exc:  # noqa: BLE001 - reportar y continuar con el resto del CSV
                 errores.append(f"Fila {i}: error al importar ({exc}).")
