@@ -209,6 +209,20 @@ def exportar_csv(path: str, clientes: Iterable[Cliente]) -> None:
             )
 
 
+def _abrir_csv_texto(path: str):
+    """Excel en español suele exportar CSV en cp1252 en vez de UTF-8; probamos UTF-8 primero
+    y si falla al decodificar, caemos a cp1252 para no romper con tildes/ñ."""
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            f = open(path, newline="", encoding=encoding)
+            f.read()
+            f.seek(0)
+            return f
+        except UnicodeDecodeError:
+            continue
+    return open(path, newline="", encoding="utf-8-sig", errors="replace")
+
+
 def importar_csv(path: str) -> tuple[int, list[str]]:
     """Importa clientes desde CSV. Columnas esperadas: nombre, contacto, estado, notas.
     Tolera columnas faltantes: usa valores por defecto y reporta filas con error.
@@ -220,7 +234,7 @@ def importar_csv(path: str) -> tuple[int, list[str]]:
     importados = 0
     errores: list[str] = []
 
-    with open(path, newline="", encoding="utf-8-sig") as f:
+    with _abrir_csv_texto(path) as f:
         reader = csv.DictReader(f)
         if not reader.fieldnames:
             return 0, ["El CSV está vacío o no tiene encabezados."]
