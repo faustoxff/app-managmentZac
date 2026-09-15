@@ -1,0 +1,3 @@
+# Sin dependencias de terceros para la app (usa Tkinter y sqlite3, ambos stdlib).
+# Solo se necesita para generar el .exe:
+pyinstaller>=6.0
