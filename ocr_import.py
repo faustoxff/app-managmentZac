@@ -259,9 +259,12 @@ def extraer_candidatos(path: str) -> list[FilaImport]:
                 break
             for limpio, x_izq in _candidatos_telefono_en_linea(lineas[j]):
                 dist_x = abs(x_izq - x_fin_nombre)
-                # a igual posición, preferimos el candidato más largo (más tokens combinados
-                # suele ser el número completo, ej. "223 155 65071" contra el "223 155" parcial)
-                distancia = (offset, dist_x, -len(limpio))
+                # Preferimos el candidato más largo ANTES que el más cercano: en estas
+                # planillas los teléfonos reales tienen 9-10 dígitos y los números de
+                # ficha/documento vecinos casi siempre son más cortos (6-8) — confirmado
+                # contra datos reales. Elegir por longitud primero evita agarrar una ficha
+                # solo por estar un poco más cerca del nombre que el teléfono real.
+                distancia = (offset, -len(limpio), dist_x)
                 if mejor_distancia is None or distancia < mejor_distancia:
                     mejor_distancia = distancia
                     mejor_telefono = limpio
