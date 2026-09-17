@@ -69,10 +69,8 @@ class App(tk.Tk):
 
         # Empaquetados a la derecha en orden inverso al visual: el último en este bloque
         # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
-        # Importar Excel, Importar por foto, Importar CSV, Exportar CSV, Exportar Excel.
+        # Importar Excel, Importar por foto, Importar con IA, Exportar Excel.
         tk.Button(bar, text="Exportar Excel", command=self._exportar_excel).pack(side="right", padx=4)
-        tk.Button(bar, text="Exportar CSV", command=self._exportar_csv).pack(side="right", padx=4)
-        tk.Button(bar, text="Importar CSV", command=self._importar_csv).pack(side="right", padx=4)
         tk.Button(bar, text="Importar con IA", command=self._importar_ia).pack(side="right", padx=4)
         tk.Button(bar, text="Importar por foto", command=self._importar_foto).pack(side="right", padx=4)
         tk.Button(bar, text="Importar Excel", command=self._importar_excel).pack(side="right", padx=4)
@@ -134,8 +132,8 @@ class App(tk.Tk):
                     c.nombre,
                     c.contacto,
                     c.estado_nombre,
-                    c.fecha_alta,
-                    c.fecha_actualizacion,
+                    self._formatear_fecha(c.fecha_alta),
+                    self._formatear_fecha(c.fecha_actualizacion),
                     c.recomendado_por,
                     c.notas,
                 ),
@@ -143,6 +141,17 @@ class App(tk.Tk):
             )
         self._clientes_actuales = clientes
         self._actualizar_label_filtros()
+
+    @staticmethod
+    def _formatear_fecha(fecha_iso: str) -> str:
+        """Solo para mostrar en la tabla: DD/MM/AAAA sin hora ni la 'T'. Lo que se guarda en
+        la DB y se usa para filtrar/ordenar sigue siendo el ISO completo, sin tocar."""
+        fecha = (fecha_iso or "").split("T")[0]
+        partes = fecha.split("-")
+        if len(partes) != 3:
+            return fecha_iso or ""
+        anio, mes, dia = partes
+        return f"{dia}/{mes}/{anio}"
 
     @staticmethod
     def _suavizar(hex_color: str) -> str:
@@ -224,18 +233,26 @@ class App(tk.Tk):
         combo.focus_set()
         self._combo_estado_activo = combo
 
-        def confirmar(event=None):
-            nuevo_nombre = var.get()
+        def cerrar():
             combo.destroy()
             if self._combo_estado_activo is combo:
                 self._combo_estado_activo = None
+
+        def confirmar(event=None):
+            nuevo_nombre = var.get()
+            cerrar()
             nuevo_estado = next((e for e in estados if e.nombre == nuevo_nombre), None)
             if nuevo_estado and nuevo_estado.id != cliente.estado_id:
                 db.cambiar_estado_cliente(cliente_id, nuevo_estado.id)
                 self._refrescar()
 
+        # OJO: NO bindear <FocusOut> acá para cerrar — abrir la lista desplegable del propio
+        # combobox dispara un FocusOut transitorio (el foco pasa al popup de opciones), así
+        # que destruir el widget en ese evento cierra el dropdown antes de que se llegue a ver
+        # ninguna opción. El combo se cierra solo al elegir un valor, al tocar Escape, o al
+        # hacer clic en otra celda de la tabla (que ya limpia cualquier combo abierto).
         combo.bind("<<ComboboxSelected>>", confirmar)
-        combo.bind("<FocusOut>", lambda e: combo.destroy())
+        combo.bind("<Escape>", lambda e: cerrar())
 
     # ---------- acciones ----------
 
@@ -269,39 +286,6 @@ class App(tk.Tk):
 
     def _abrir_estados(self):
         EstadosPopup(self, on_change=self._refrescar)
-
-    def _importar_csv(self):
-        path = filedialog.askopenfilename(filetypes=[("CSV", "*.csv")])
-        if not path:
-            return
-        try:
-            importados, errores = db.importar_csv(path)
-        except Exception as exc:  # noqa: BLE001 - no crashear ante CSV inválido
-            messagebox.showerror("Error al importar", f"No se pudo leer el archivo:\n{exc}")
-            return
-        self._refrescar()
-        msg = f"Se importaron {importados} clientes."
-        if errores:
-            msg += f"\n\n{len(errores)} fila(s) con problemas:\n" + "\n".join(errores[:15])
-            if len(errores) > 15:
-                msg += f"\n... y {len(errores) - 15} más."
-        messagebox.showinfo("Importación finalizada", msg)
-
-    def _exportar_csv(self):
-        if not self._clientes_actuales:
-            messagebox.showinfo("Sin datos", "No hay clientes para exportar en la vista actual.")
-            return
-        path = filedialog.asksaveasfilename(
-            defaultextension=".csv", filetypes=[("CSV", "*.csv")], initialfile="clientes.csv"
-        )
-        if not path:
-            return
-        try:
-            db.exportar_csv(path, self._clientes_actuales)
-        except Exception as exc:  # noqa: BLE001
-            messagebox.showerror("Error al exportar", str(exc))
-            return
-        messagebox.showinfo("Exportado", f"Se exportaron {len(self._clientes_actuales)} clientes.")
 
     def _exportar_excel(self):
         if not self._clientes_actuales:

@@ -1,5 +1,4 @@
 """Acceso a SQLite. Cada operación abre y cierra su propia conexión (context manager)."""
-import csv
 import sqlite3
 import unicodedata
 from contextlib import contextmanager
@@ -326,83 +325,6 @@ def cambiar_estado_cliente(cliente_id: int, estado_id: int) -> None:
 def eliminar_cliente(cliente_id: int) -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM clientes WHERE id = ?", (cliente_id,))
-
-
-# ---------- CSV ----------
-
-CSV_COLUMNAS = ["nombre", "contacto", "estado", "notas", "recomendado_por"]
-
-
-def exportar_csv(path: str, clientes: Iterable[Cliente]) -> None:
-    with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=["nombre", "contacto", "estado", "fecha_actualizacion", "notas", "recomendado_por"],
-        )
-        writer.writeheader()
-        for c in clientes:
-            writer.writerow(
-                {
-                    "nombre": c.nombre,
-                    "contacto": c.contacto,
-                    "estado": c.estado_nombre,
-                    "fecha_actualizacion": c.fecha_actualizacion,
-                    "notas": c.notas,
-                    "recomendado_por": c.recomendado_por,
-                }
-            )
-
-
-def _abrir_csv_texto(path: str):
-    """Excel en español suele exportar CSV en cp1252 en vez de UTF-8; probamos UTF-8 primero
-    y si falla al decodificar, caemos a cp1252 para no romper con tildes/ñ."""
-    for encoding in ("utf-8-sig", "cp1252"):
-        try:
-            f = open(path, newline="", encoding=encoding)
-            f.read()
-            f.seek(0)
-            return f
-        except UnicodeDecodeError:
-            continue
-    return open(path, newline="", encoding="utf-8-sig", errors="replace")
-
-
-def importar_csv(path: str) -> tuple[int, list[str]]:
-    """Importa clientes desde CSV. Columnas esperadas: nombre, contacto, estado, notas.
-    Tolera columnas faltantes: usa valores por defecto y reporta filas con error.
-    Devuelve (cantidad_importada, lista_de_errores).
-    """
-    estados = {e.nombre.lower(): e.id for e in listar_estados()}
-    estado_default_id = listar_estados()[0].id if estados else None
-
-    importados = 0
-    errores: list[str] = []
-
-    with _abrir_csv_texto(path) as f:
-        reader = csv.DictReader(f)
-        if not reader.fieldnames:
-            return 0, ["El CSV está vacío o no tiene encabezados."]
-
-        for i, row in enumerate(reader, start=2):
-            nombre = (row.get("nombre") or "").strip()
-            if not nombre:
-                errores.append(f"Fila {i}: falta 'nombre', se omite.")
-                continue
-            contacto = (row.get("contacto") or "").strip()
-            notas = (row.get("notas") or "").strip()
-            recomendado_por = (row.get("recomendado_por") or "").strip()
-            estado_txt = (row.get("estado") or "").strip().lower()
-            estado_id = estados.get(estado_txt, estado_default_id)
-            if estado_id is None:
-                errores.append(f"Fila {i}: no hay estados configurados, se omite.")
-                continue
-            try:
-                crear_cliente(nombre, contacto, estado_id, notas, recomendado_por)
-                importados += 1
-            except Exception as exc:  # noqa: BLE001 - reportar y continuar con el resto del CSV
-                errores.append(f"Fila {i}: error al importar ({exc}).")
-
-    return importados, errores
 
 
 # ---------- Importación masiva genérica (Excel, OCR) ----------

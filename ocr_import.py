@@ -235,7 +235,7 @@ def extraer_candidatos(path: str) -> list[FilaImport]:
         )
         if not m_nombre:
             continue
-        nombre = m_nombre.group(0).title()
+        nombre = m_nombre.group(0).upper()  # ya viene en mayúscula de la hoja, pero forzamos
 
         # posición x aproximada de fin del nombre (no de toda la línea), para desempatar
         # teléfonos por cercanía: ubicamos qué palabra de `linea` corresponde al final del

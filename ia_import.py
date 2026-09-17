@@ -139,7 +139,7 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
     for item in datos:
         if not isinstance(item, dict):
             continue
-        nombre = str(item.get("nombre", "")).strip()
+        nombre = str(item.get("nombre", "")).strip().upper()
         telefono = str(item.get("telefono", "")).strip()
         if not nombre and not telefono:
             continue

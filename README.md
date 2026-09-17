@@ -18,7 +18,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-El core de la app (CRUD, filtros, CSV) solo necesita Tkinter y sqlite3, que son parte de
+El core de la app (CRUD, filtros) solo necesita Tkinter y sqlite3, que son parte de
 Python estándar. Las dependencias de `requirements.txt` son para importar desde Excel/foto y
 para generar el `.exe`; si no se instalan, esos botones muestran un aviso claro en vez de
 romper el resto de la app.
@@ -94,9 +94,8 @@ local.
 - Alta, edición, borrado y cambio de estado de clientes.
 - Estados configurables (nombre y color) desde el botón "Estados".
 - Filtros por estado, rango de fechas y texto libre (nombre/notas/recomendado por).
-- Importar/exportar clientes en CSV (columnas: `nombre, contacto, estado, notas, recomendado_por`).
-  La importación tolera columnas faltantes o filas incompletas: reporta errores por fila
-  sin interrumpir el resto de la carga.
+- Los nombres se guardan siempre en MAYÚSCULA (alta manual, edición, y todas las
+  importaciones), incluso mientras se escribe en el formulario.
 - **Validación de duplicados**: al cargar un cliente (a mano, o vía Excel/foto), si ya existe
   uno con el mismo teléfono (normalizado) o el mismo nombre (sin importar mayúsculas/tildes),
   se avisa antes de cargar — sin bloquear, se puede ver el existente o cargar igual.

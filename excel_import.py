@@ -121,7 +121,7 @@ def parsear_filas(path: str, mapeo: dict) -> list[FilaImport]:
             continue
         resultado.append(
             FilaImport(
-                nombre=valor(row, "nombre"),
+                nombre=valor(row, "nombre").upper(),
                 contacto=valor(row, "contacto"),
                 estado=valor(row, "estado"),
                 notas=valor(row, "notas"),

@@ -28,6 +28,7 @@ class ClienteForm(tk.Toplevel):
 
         tk.Label(self, text="Nombre *").grid(row=0, column=0, sticky="w", **pad)
         self.nombre_var = tk.StringVar(value=cliente.nombre if cliente else "")
+        self.nombre_var.trace_add("write", self._forzar_mayusculas)
         tk.Entry(self, textvariable=self.nombre_var, width=40).grid(row=0, column=1, **pad)
 
         tk.Label(self, text="Contacto").grid(row=1, column=0, sticky="w", **pad)
@@ -61,6 +62,14 @@ class ClienteForm(tk.Toplevel):
         btn_frame.grid(row=5, column=0, columnspan=2, pady=10)
         tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=5)
+
+    def _forzar_mayusculas(self, *_args):
+        """Se ve en mayúscula mientras se escribe, no solo al guardar (db.crear_cliente ya lo
+        hace igual, pero así queda consistente en pantalla desde el primer momento)."""
+        texto = self.nombre_var.get()
+        mayus = texto.upper()
+        if texto != mayus:
+            self.nombre_var.set(mayus)
 
     def _guardar(self):
         nombre = self.nombre_var.get().strip()
