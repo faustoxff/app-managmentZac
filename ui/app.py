@@ -268,13 +268,19 @@ class App(tk.Tk):
         ClienteForm(self, on_saved=self._refrescar, cliente=cliente)
 
     def _borrar_cliente(self):
-        cliente_id = self._seleccion_id()
-        if not cliente_id:
-            messagebox.showinfo("Seleccionar", "Elegí un cliente para borrar.")
+        ids = self._seleccion_ids()
+        if not ids:
+            messagebox.showinfo("Seleccionar", "Elegí uno o más clientes para borrar.")
             return
-        if not messagebox.askyesno("Confirmar", "¿Borrar el cliente seleccionado?"):
+        pregunta = (
+            "¿Borrar el cliente seleccionado?"
+            if len(ids) == 1
+            else f"¿Borrar los {len(ids)} clientes seleccionados?"
+        )
+        if not messagebox.askyesno("Confirmar", pregunta):
             return
-        db.eliminar_cliente(cliente_id)
+        for cliente_id in ids:
+            db.eliminar_cliente(cliente_id)
         self._refrescar()
 
     def _abrir_filtros(self):
