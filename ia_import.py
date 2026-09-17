@@ -120,6 +120,15 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
             "IA (lista de modelos con visión disponibles ahora: openrouter.ai/models, filtrá "
             'por "image input" y "free").'
         ) from exc
+    except openai.APIStatusError as exc:
+        if exc.status_code == 402:
+            raise IAImportError(
+                "No hay crédito cargado en la cuenta de OpenRouter (error 402).\n\n"
+                "Cargá crédito en openrouter.ai/settings/credits (con unos pocos dólares "
+                "alcanza para muchísimas fotos), o usá un modelo gratis (con :free al final "
+                "del nombre) desde Configuración > Configurar IA."
+            ) from exc
+        raise IAImportError(f"Error al consultar la IA (código {exc.status_code}): {exc}") from exc
     except Exception as exc:  # noqa: BLE001 - cubrimos toda la superficie de errores del SDK
         raise IAImportError(f"Error al consultar la IA: {exc}") from exc
 
