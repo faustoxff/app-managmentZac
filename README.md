@@ -23,9 +23,17 @@ Python estándar. Las dependencias de `requirements.txt` son para importar desde
 para generar el `.exe`; si no se instalan, esos botones muestran un aviso claro en vez de
 romper el resto de la app.
 
-## Importar por foto (OCR) — instalar Tesseract
+## Importar por foto (OCR) — Tesseract
 
-Esta función necesita **Tesseract-OCR** instalado en el sistema (es un programa aparte, no una
+**El `.exe` de Windows generado por GitHub Actions ya trae Tesseract-OCR empaquetado adentro**
+(con el idioma español incluido) — no hace falta instalar nada aparte para usar "Importar por
+foto" ni "Subida por celular" con ese ejecutable. Ver `.github/workflows/build.yml`
+(`choco install tesseract` + `--add-data` de PyInstaller) y `ocr_import.py`
+(`_configurar_tesseract_embebido`), que detecta automáticamente si está corriendo empaquetado
+y usa ese Tesseract en vez de buscar uno en el sistema.
+
+Esto solo aplica al `.exe` ya compilado. Corriendo en modo desarrollo (`python main.py`) sigue
+haciendo falta **Tesseract-OCR** instalado en el sistema (es un programa aparte, no una
 librería de Python):
 
 - Windows: descargar el instalador desde https://github.com/UB-Mannheim/tesseract/wiki y

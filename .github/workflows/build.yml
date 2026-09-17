@@ -13,10 +13,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Instalar Tesseract-OCR (para empaquetarlo dentro del .exe)
+        shell: pwsh
+        run: choco install tesseract -y --no-progress
+      - name: Agregar idioma español a Tesseract
+        shell: pwsh
+        run: |
+          $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
+          if (-not (Test-Path "$tessdata\spa.traineddata")) {
+            Invoke-WebRequest `
+              -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/spa.traineddata" `
+              -OutFile "$tessdata\spa.traineddata"
+          }
       - name: Instalar dependencias
         run: pip install -r requirements.txt
-      - name: Generar .exe
-        run: pyinstaller --onefile --windowed --name GestorClientes main.py
+      - name: Generar .exe (con Tesseract empaquetado adentro)
+        run: >-
+          pyinstaller --onefile --windowed --name GestorClientes
+          --add-data "C:\Program Files\Tesseract-OCR;tesseract"
+          main.py
       - uses: actions/upload-artifact@v4
         with:
           name: GestorClientes-windows

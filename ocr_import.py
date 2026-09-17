@@ -3,8 +3,11 @@
 No pretende ser precisa: la tabla de revisión en la UI compensa los errores de OCR. La idea es
 un candidato razonable por persona, no un parseo perfecto de la hoja.
 """
+import os
 import re
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from PIL import Image, ImageOps
 
@@ -41,6 +44,24 @@ class TesseractNoDisponible(Exception):
     pass
 
 
+def _configurar_tesseract_embebido(pytesseract) -> None:
+    """Cuando la app corre empaquetada (.exe de PyInstaller), el build en GitHub Actions
+    empaqueta el propio Tesseract-OCR adentro del ejecutable (ver .github/workflows/build.yml)
+    para que no haga falta instalarlo aparte en la PC de destino. Acá lo detectamos y le
+    decimos a pytesseract que use ESE binario en vez de buscar uno en el sistema.
+    En modo desarrollo (`python main.py`), sys.frozen no existe y esto no hace nada: sigue
+    usando el Tesseract del sistema, como documenta el README."""
+    if not getattr(sys, "frozen", False):
+        return
+    base = Path(getattr(sys, "_MEIPASS", ""))
+    tesseract_exe = base / "tesseract" / "tesseract.exe"
+    tessdata_dir = base / "tesseract" / "tessdata"
+    if tesseract_exe.exists():
+        pytesseract.pytesseract.tesseract_cmd = str(tesseract_exe)
+    if tessdata_dir.exists():
+        os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
+
+
 def _requerir_pytesseract():
     try:
         import pytesseract
@@ -48,6 +69,7 @@ def _requerir_pytesseract():
         raise TesseractNoDisponible(
             "Falta instalar la librería pytesseract (pip install pytesseract)."
         ) from exc
+    _configurar_tesseract_embebido(pytesseract)
     return pytesseract
 
 
