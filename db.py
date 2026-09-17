@@ -341,6 +341,11 @@ class FilaImport:
     notas: str = ""
     recomendado_por: str = ""
     origen: str = ""  # info libre para mostrar en la revisión (ej. línea del Excel u OCR)
+    # Confianza 0-100 que tuvo Tesseract al leer nombre/teléfono (None = no aplica, ej. Excel
+    # o IA). Solo se usa para pintar de aviso las filas dudosas en la tabla de revisión — no
+    # afecta en nada el guardado en la DB.
+    confianza_nombre: float | None = None
+    confianza_telefono: float | None = None
 
 
 @dataclass

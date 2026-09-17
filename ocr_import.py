@@ -38,6 +38,9 @@ LINEA_NO_PACIENTE = [
 
 LINEAS_DE_BUSQUEDA_TELEFONO = 2  # además de la línea del nombre, busca en las próximas N
 MAX_PALABRAS_POR_TELEFONO = 3  # cuántos tokens consecutivos se combinan como candidato
+UMBRAL_CONFIANZA_PARA_REFINAR = 70  # 0-100: por debajo de esto, vale la pena intentar el
+# recorte+whitelist; por encima, la pasada general ya viene bien y no conviene arriesgarla.
+UMBRAL_CONFIANZA_AVISO = 60  # por debajo de esto, la fila se marca para revisión en la UI
 
 
 class TesseractNoDisponible(Exception):
@@ -131,7 +134,19 @@ def _deskew(img: Image.Image, rango: float = 8.0, paso: float = 1.0) -> Image.Im
 class _Palabra:
     texto: str
     left: int
+    top: int
+    width: int
+    height: int
+    conf: float
     line_key: tuple
+
+    @property
+    def right(self) -> int:
+        return self.left + self.width
+
+    @property
+    def bottom(self) -> int:
+        return self.top + self.height
 
 
 TESSERACT_CONFIG = "--psm 6"  # asume un único bloque de texto uniforme: mucho mejor para
@@ -164,7 +179,21 @@ def _extraer_palabras(img: Image.Image) -> list[_Palabra]:
         if not texto:
             continue
         line_key = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
-        palabras.append(_Palabra(texto=texto, left=data["left"][i], line_key=line_key))
+        try:
+            conf = float(data["conf"][i])
+        except (ValueError, TypeError):
+            conf = -1.0
+        palabras.append(
+            _Palabra(
+                texto=texto,
+                left=data["left"][i],
+                top=data["top"][i],
+                width=data["width"][i],
+                height=data["height"][i],
+                conf=conf,
+                line_key=line_key,
+            )
+        )
     return palabras
 
 
@@ -183,12 +212,14 @@ def _limpiar_telefono(candidato: str) -> str:
     return candidato.replace(" ", "").replace("-", "")
 
 
-def _candidatos_telefono_en_linea(linea: list["_Palabra"]) -> list[tuple[str, int]]:
+def _candidatos_telefono_en_linea(
+    linea: list["_Palabra"],
+) -> list[tuple[str, int, list["_Palabra"]]]:
     """Busca teléfonos combinando hasta MAX_PALABRAS_POR_TELEFONO tokens *consecutivos* que
     sean puramente numéricos (dígitos/espacios/guiones). Trabajar por token en vez de sobre
     el texto de toda la línea evita que un teléfono y un número de otra columna (ficha, DNI)
     que quedan separados solo por un espacio en la línea de Tesseract se peguen en un único
-    número falso. Devuelve (teléfono_limpio, x_izquierda_del_primer_token) por candidato."""
+    número falso. Devuelve (teléfono_limpio, x_izquierda_del_primer_token, palabras_fuente)."""
     candidatos = []
     n = len(linea)
     for i in range(n):
@@ -200,16 +231,47 @@ def _candidatos_telefono_en_linea(linea: list["_Palabra"]) -> list[tuple[str, in
                 break  # si un token no es numérico, ni éste ni los que siguen extienden el candidato
             limpio = _limpiar_telefono(" ".join(p.texto for p in tramo))
             if 6 <= len(limpio) <= 11:
-                candidatos.append((limpio, tramo[0].left))
+                candidatos.append((limpio, tramo[0].left, tramo))
 
     # si un candidato es sub-cadena de otro más largo (ej. "500292" dentro de "155500292",
     # porque el teléfono venía partido en 2 tokens de Tesseract), nos quedamos con el más
     # largo: el corto es solo un fragmento del mismo número, no un candidato independiente.
     return [
-        (limpio, x)
-        for limpio, x in candidatos
-        if not any(limpio != otro and limpio in otro for otro, _ in candidatos)
+        (limpio, x, tramo)
+        for limpio, x, tramo in candidatos
+        if not any(limpio != otro and limpio in otro for otro, _, _ in candidatos)
     ]
+
+
+ALFABETO_NOMBRE = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZÁÉÍÓÚ "
+DIGITOS_TELEFONO = "0123456789- "
+
+
+def _recortar_y_refinar(img: Image.Image, palabras: list["_Palabra"], whitelist: str) -> str:
+    """Recorta el rectángulo que ocupan estas palabras (con margen) y corre Tesseract SOLO
+    ahí, restringido a `whitelist`. Al no tener que decidir entre letras y dígitos en toda la
+    hoja, Tesseract se confunde mucho menos en esa región puntual que en la pasada general."""
+    if not palabras:
+        return ""
+    pytesseract = _requerir_pytesseract()
+    margen = 4
+    x0 = max(0, min(p.left for p in palabras) - margen)
+    y0 = max(0, min(p.top for p in palabras) - margen)
+    x1 = min(img.width, max(p.right for p in palabras) + margen)
+    y1 = min(img.height, max(p.bottom for p in palabras) + margen)
+    if x1 <= x0 or y1 <= y0:
+        return ""
+    recorte = img.crop((x0, y0, x1, y1))
+    config = f"--psm 7 -c tessedit_char_whitelist={whitelist}"
+    try:
+        return pytesseract.image_to_string(recorte, lang="spa", config=config).strip()
+    except Exception:  # noqa: BLE001 - si falla el refinamiento, seguimos con lo que ya había
+        return ""
+
+
+def _promedio_confianza(palabras: list["_Palabra"]) -> float:
+    confs = [p.conf for p in palabras if p.conf >= 0]
+    return sum(confs) / len(confs) if confs else -1.0
 
 
 def extraer_candidatos(path: str) -> list[FilaImport]:
@@ -237,27 +299,27 @@ def extraer_candidatos(path: str) -> list[FilaImport]:
             continue
         nombre = m_nombre.group(0).upper()  # ya viene en mayúscula de la hoja, pero forzamos
 
-        # posición x aproximada de fin del nombre (no de toda la línea), para desempatar
-        # teléfonos por cercanía: ubicamos qué palabra de `linea` corresponde al final del
-        # match, reconstruyendo los mismos offsets de caracteres que arma texto_linea (join
-        # con un espacio simple entre palabras).
+        # posición x del fin del nombre (para desempatar teléfonos por cercanía) y las
+        # palabras que componen el match (para recortar esa región después): reconstruimos
+        # los mismos offsets de caracteres que arma texto_linea (join con un espacio simple).
         x_fin_nombre = linea[0].left if linea else 0
+        palabras_nombre: list[_Palabra] = []
         cursor = 0
         for p in linea:
             inicio = cursor
             cursor += len(p.texto) + 1  # +1 por el espacio separador
-            if inicio < m_nombre.end():
+            if inicio < m_nombre.end() and cursor - 1 > m_nombre.start():
+                palabras_nombre.append(p)
                 x_fin_nombre = p.left
-            else:
-                break
 
         mejor_telefono = None
         mejor_distancia = None
+        palabras_telefono: list[_Palabra] = []
         for offset in range(0, LINEAS_DE_BUSQUEDA_TELEFONO + 1):
             j = i + offset
             if j >= len(lineas):
                 break
-            for limpio, x_izq in _candidatos_telefono_en_linea(lineas[j]):
+            for limpio, x_izq, tramo in _candidatos_telefono_en_linea(lineas[j]):
                 dist_x = abs(x_izq - x_fin_nombre)
                 # Preferimos el candidato más largo ANTES que el más cercano: en estas
                 # planillas los teléfonos reales tienen 9-10 dígitos y los números de
@@ -268,14 +330,38 @@ def extraer_candidatos(path: str) -> list[FilaImport]:
                 if mejor_distancia is None or distancia < mejor_distancia:
                     mejor_distancia = distancia
                     mejor_telefono = limpio
+                    palabras_telefono = tramo
             if mejor_telefono and offset == 0:
                 break  # ya encontró en la misma línea del nombre, no hace falta seguir
+
+        # Segunda pasada de Tesseract, recortada a solo esta región y restringida al alfabeto
+        # esperado (letras para el nombre, dígitos para el teléfono). SOLO se intenta cuando
+        # la pasada general ya viene dudosa (poca confianza, o un teléfono de largo raro) —
+        # probado contra una foto real: refinar un dato que la pasada general ya leyó bien a
+        # veces lo empeora (el recorte también puede confundirse), así que no vale la pena
+        # arriesgar un dato ya confiable solo por intentar "mejorarlo".
+        confianza_nombre = _promedio_confianza(palabras_nombre)
+        if confianza_nombre < 0 or confianza_nombre < UMBRAL_CONFIANZA_PARA_REFINAR:
+            nombre_refinado = _recortar_y_refinar(img, palabras_nombre, ALFABETO_NOMBRE)
+            if RE_NOMBRE.fullmatch(nombre_refinado.strip()):
+                nombre = nombre_refinado.strip()
+
+        confianza_telefono = _promedio_confianza(palabras_telefono)
+        largo_actual = len(mejor_telefono or "")
+        telefono_dudoso = confianza_telefono < 0 or confianza_telefono < UMBRAL_CONFIANZA_PARA_REFINAR
+        largo_raro = largo_actual not in (9, 10)  # los teléfonos reales de esta zona miden 9-10
+        if palabras_telefono and (telefono_dudoso or largo_raro):
+            refinado = _limpiar_telefono(_recortar_y_refinar(img, palabras_telefono, DIGITOS_TELEFONO))
+            if 6 <= len(refinado) <= 11 and len(refinado) >= largo_actual:
+                mejor_telefono = refinado
 
         candidatos.append(
             FilaImport(
                 nombre=nombre,
                 contacto=mejor_telefono or "",
                 origen=f"OCR línea {i + 1}",
+                confianza_nombre=confianza_nombre,
+                confianza_telefono=confianza_telefono,
             )
         )
 
