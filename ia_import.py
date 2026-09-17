@@ -113,6 +113,13 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
         raise IAImportError(
             "No hay conexión a internet (o no se pudo contactar OpenRouter). Intentá de nuevo."
         ) from exc
+    except openai.NotFoundError as exc:
+        raise IAImportError(
+            f'El modelo configurado ("{modelo}") ya no está disponible en OpenRouter — los '
+            "modelos gratis rotan seguido. Cambiá el modelo desde Configuración > Configurar "
+            "IA (lista de modelos con visión disponibles ahora: openrouter.ai/models, filtrá "
+            'por "image input" y "free").'
+        ) from exc
     except Exception as exc:  # noqa: BLE001 - cubrimos toda la superficie de errores del SDK
         raise IAImportError(f"Error al consultar la IA: {exc}") from exc
 

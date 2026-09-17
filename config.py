@@ -45,7 +45,11 @@ def _escribir_config(datos: dict) -> None:
         pass  # no crashear si no se puede escribir (disco lleno, permisos, etc.)
 
 
-MODELO_IA_DEFAULT = "meta-llama/llama-3.2-11b-vision-instruct:free"
+MODELO_IA_DEFAULT = "google/gemma-4-31b-it:free"
+# Los modelos gratis de OpenRouter rotan seguido (dejan de estar disponibles y aparecen otros
+# nuevos) — si este default deja de funcionar, la lista de modelos con visión disponibles hoy
+# está en https://openrouter.ai/models?fmt=cards&input_modalities=image&max_price=0, o
+# cambiando el campo "Modelo" desde Configuración > Configurar IA.
 
 
 def obtener_api_key() -> str:
