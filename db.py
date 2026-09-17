@@ -10,6 +10,7 @@ from config import DB_PATH
 from models import Cliente, Estado
 
 ESTADOS_SEED = [
+    ("Nuevo", "#8b5cf6"),
     ("Descartado", "#9ca3af"),
     ("OK", "#22c55e"),
     ("Cliente", "#3b82f6"),
@@ -99,11 +100,38 @@ def init_db() -> None:
 
 def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
     """Crea los ESTADOS_SEED actuales si faltan, y migra los clientes que apunten a un estado
-    que no sea uno de esos 5 (viejo esquema, o un estado custom que el usuario haya creado)
-    usando MAPEO_ESTADOS_MIGRACION, con "Esperar" como default si no hay mapeo específico.
-    Es idempotente: en una DB ya migrada no encuentra nada para mover."""
-    existentes = {r["nombre"]: r["id"] for r in conn.execute("SELECT id, nombre FROM estados").fetchall()}
+    viejo o custom. Es idempotente: en una DB ya migrada no encuentra nada para mover.
 
+    Va en 2 fases a propósito: el esquema viejo tenía un estado llamado "Nuevo" (con otro
+    significado) que se migra a "Esperar" — y el esquema actual TAMBIÉN tiene un "Nuevo".
+    Si sembráramos los ESTADOS_SEED actuales primero, un "Nuevo" viejo sin migrar todavía se
+    confundiría con el "Nuevo" nuevo (mismo nombre, fila con historial distinto). Por eso acá
+    primero se resuelven los nombres que son clave de MAPEO_ESTADOS_MIGRACION (fase 1, mueve
+    sus clientes y borra la fila vieja) y recién después se siembran/reordenan los actuales
+    (fase 2) — así nunca coexisten un "Nuevo" viejo y uno nuevo al mismo tiempo.
+    """
+    # Fase 1: estados que son clave del mapeo viejo->nuevo, se resuelven primero.
+    viejos = conn.execute("SELECT id, nombre FROM estados").fetchall()
+    for row in viejos:
+        nombre_viejo, id_viejo = row["nombre"], row["id"]
+        if nombre_viejo not in MAPEO_ESTADOS_MIGRACION:
+            continue
+        nombre_nuevo = MAPEO_ESTADOS_MIGRACION[nombre_viejo]
+        fila_destino = conn.execute(
+            "SELECT id FROM estados WHERE nombre = ?", (nombre_nuevo,)
+        ).fetchone()
+        if fila_destino:
+            id_nuevo = fila_destino["id"]
+        else:
+            color = next((c for n, c in ESTADOS_SEED if n == nombre_nuevo), "#808080")
+            id_nuevo = conn.execute(
+                "INSERT INTO estados (nombre, color, orden) VALUES (?, ?, 999)", (nombre_nuevo, color)
+            ).lastrowid
+        conn.execute("UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (id_nuevo, id_viejo))
+        conn.execute("DELETE FROM estados WHERE id = ?", (id_viejo,))
+
+    # Fase 2: asegura que existan (y con el orden correcto) todos los ESTADOS_SEED actuales.
+    existentes = {r["nombre"]: r["id"] for r in conn.execute("SELECT id, nombre FROM estados").fetchall()}
     for orden, (nombre, color) in enumerate(ESTADOS_SEED):
         if nombre not in existentes:
             cur = conn.execute(
@@ -113,17 +141,15 @@ def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
         else:
             conn.execute("UPDATE estados SET orden = ? WHERE id = ?", (orden, existentes[nombre]))
 
+    # Fase 3: lo que sobreviva y no sea uno de los actuales (estado custom del usuario, o algo
+    # viejo sin mapeo específico) migra a "Esperar" por default.
     id_esperar = existentes["Esperar"]
-
-    viejos = conn.execute("SELECT id, nombre FROM estados").fetchall()
-    for row in viejos:
-        nombre_viejo, id_viejo = row["nombre"], row["id"]
-        if nombre_viejo in ESTADOS_SEED_NOMBRES:
-            continue  # ya es uno de los estados actuales, no se toca
-        nombre_nuevo = MAPEO_ESTADOS_MIGRACION.get(nombre_viejo, "Esperar")
-        id_nuevo = existentes.get(nombre_nuevo, id_esperar)
-        conn.execute("UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (id_nuevo, id_viejo))
-        conn.execute("DELETE FROM estados WHERE id = ?", (id_viejo,))
+    sobrantes = conn.execute("SELECT id, nombre FROM estados").fetchall()
+    for row in sobrantes:
+        if row["nombre"] in ESTADOS_SEED_NOMBRES:
+            continue
+        conn.execute("UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (id_esperar, row["id"]))
+        conn.execute("DELETE FROM estados WHERE id = ?", (row["id"],))
 
 
 def _now_iso() -> str:
