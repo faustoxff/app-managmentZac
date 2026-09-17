@@ -49,7 +49,7 @@ class App(tk.Tk):
     def _build_menu(self):
         menubar = tk.Menu(self)
         config_menu = tk.Menu(menubar, tearoff=0)
-        config_menu.add_command(label="Cambiar API key de IA", command=self._cambiar_api_key)
+        config_menu.add_command(label="Configurar IA", command=self._cambiar_api_key)
         menubar.add_cascade(label="Configuración", menu=config_menu)
         self.config(menu=menubar)
 

@@ -1,7 +1,10 @@
-"""Extracción de (nombre, teléfono) desde una foto usando la API de Anthropic (visión), como
-alternativa al OCR local (ocr_import.py) para hojas con formatos raros donde Tesseract no da
-buenos resultados. Necesita internet y una API key propia — a diferencia del resto de la app,
-que funciona 100% offline."""
+"""Extracción de (nombre, teléfono) desde una foto usando un modelo con visión vía OpenRouter
+(https://openrouter.ai), como alternativa al OCR local (ocr_import.py) para hojas con formatos
+raros donde Tesseract no da buenos resultados. Necesita internet y una API key propia — a
+diferencia del resto de la app, que funciona 100% offline.
+
+OpenRouter expone una API compatible con la de OpenAI (mismo formato de mensajes/imagen), así
+que usamos el SDK `openai` apuntando a su base_url en vez de necesitar un SDK propio."""
 import base64
 import json
 import mimetypes
@@ -11,8 +14,6 @@ import config
 from db import FilaImport
 
 INSTRUCCION_DEFAULT = "Extraé nombre completo y teléfono de cada persona en esta hoja."
-
-MODELO = "claude-sonnet-5"
 
 PROMPT_FORMATO = (
     ' Respondé ÚNICAMENTE con JSON válido: una lista de objetos con las claves "nombre" y '
@@ -32,19 +33,17 @@ class FaltaApiKey(IAImportError):
     reintente, en vez de mostrar esto como un error genérico."""
 
 
-def _requerir_cliente_anthropic():
+def _requerir_cliente_openrouter():
     try:
-        import anthropic
+        import openai
     except ImportError as exc:
-        raise IAImportError(
-            "Falta instalar la librería anthropic:\n\npip install anthropic"
-        ) from exc
+        raise IAImportError("Falta instalar la librería openai:\n\npip install openai") from exc
 
     api_key = config.obtener_api_key()
     if not api_key:
         raise FaltaApiKey()
 
-    return anthropic.Anthropic(api_key=api_key)
+    return openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
 
 
 def _extraer_json(texto: str) -> list:
@@ -61,7 +60,10 @@ def _extraer_json(texto: str) -> list:
 
 
 def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
-    client = _requerir_cliente_anthropic()
+    import openai  # ya validado disponible por _requerir_cliente_openrouter()
+
+    client = _requerir_cliente_openrouter()
+    modelo = config.obtener_modelo_ia()
 
     media_type = mimetypes.guess_type(path_imagen)[0] or "image/jpeg"
     if media_type not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
@@ -76,28 +78,45 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
     instruccion = (instruccion or INSTRUCCION_DEFAULT).strip() + PROMPT_FORMATO
 
     try:
-        respuesta = client.messages.create(
-            model=MODELO,
+        respuesta = client.chat.completions.create(
+            model=modelo,
             max_tokens=2048,
             messages=[
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "image",
-                            "source": {"type": "base64", "media_type": media_type, "data": imagen_b64},
-                        },
                         {"type": "text", "text": instruccion},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{media_type};base64,{imagen_b64}"},
+                        },
                     ],
                 }
             ],
         )
+    except openai.RateLimitError as exc:
+        raise IAImportError(
+            "Se alcanzó el límite de uso gratuito de OpenRouter (error 429).\n\n"
+            "Cargá crédito en tu cuenta en openrouter.ai/credits para subir el límite, "
+            "o esperá un rato y probá de nuevo."
+        ) from exc
+    except openai.AuthenticationError as exc:
+        raise IAImportError(
+            "La API key de OpenRouter no es válida. Podés cambiarla desde el menú "
+            "Configuración > Configurar IA."
+        ) from exc
+    except openai.APITimeoutError as exc:
+        raise IAImportError(
+            "Se agotó el tiempo de espera. Revisá tu conexión a internet e intentá de nuevo."
+        ) from exc
+    except openai.APIConnectionError as exc:
+        raise IAImportError(
+            "No hay conexión a internet (o no se pudo contactar OpenRouter). Intentá de nuevo."
+        ) from exc
     except Exception as exc:  # noqa: BLE001 - cubrimos toda la superficie de errores del SDK
-        raise IAImportError(_mensaje_error_api(exc)) from exc
+        raise IAImportError(f"Error al consultar la IA: {exc}") from exc
 
-    texto_respuesta = "".join(
-        bloque.text for bloque in respuesta.content if getattr(bloque, "type", None) == "text"
-    )
+    texto_respuesta = respuesta.choices[0].message.content or ""
     datos = _extraer_json(texto_respuesta)
 
     candidatos = []
@@ -110,17 +129,3 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
             continue
         candidatos.append(FilaImport(nombre=nombre, contacto=telefono, origen="IA"))
     return candidatos
-
-
-def _mensaje_error_api(exc: Exception) -> str:
-    texto = str(exc).lower()
-    if "authenticat" in texto or "401" in texto or "invalid x-api-key" in texto or "api key" in texto:
-        return (
-            "La API key no es válida. Podés cambiarla desde el menú "
-            "Configuración > Cambiar API key de IA."
-        )
-    if "timeout" in texto or "timed out" in texto:
-        return "Se agotó el tiempo de espera. Revisá tu conexión a internet e intentá de nuevo."
-    if "connection" in texto or "network" in texto or "resolve" in texto:
-        return "No hay conexión a internet (o no se pudo contactar la API). Intentá de nuevo."
-    return f"Error al consultar la IA: {exc}"

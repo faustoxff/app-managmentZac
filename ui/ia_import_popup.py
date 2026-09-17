@@ -6,7 +6,7 @@ from ui.api_key_popup import ApiKeyPopup
 
 
 class IAImportPopup(tk.Toplevel):
-    """Selector de imagen + instrucción tipo chat para importar con IA (API de Anthropic).
+    """Selector de imagen + instrucción tipo chat para importar con IA (vía OpenRouter).
     La llamada a la API corre en un hilo aparte para no congelar la ventana; el resultado
     vuelve al hilo principal con self.after(), nunca se toca la UI desde el hilo de red."""
 
