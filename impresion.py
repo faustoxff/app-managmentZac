@@ -5,6 +5,7 @@ import tempfile
 import webbrowser
 from typing import Iterable
 
+from fechas import formatear_fecha
 from models import Cliente
 
 
@@ -14,7 +15,7 @@ def imprimir_clientes(clientes: Iterable[Cliente]) -> None:
         f"<td>{html.escape(c.nombre)}</td>"
         f"<td>{html.escape(c.contacto)}</td>"
         f"<td>{html.escape(c.estado_nombre)}</td>"
-        f"<td>{html.escape(c.fecha_alta)}</td>"
+        f"<td>{html.escape(formatear_fecha(c.fecha_alta))}</td>"
         "</tr>"
         for c in clientes
     )

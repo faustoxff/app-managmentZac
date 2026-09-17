@@ -6,6 +6,7 @@ import openpyxl
 
 from config import get_data_dir
 from db import FilaImport
+from fechas import formatear_fecha
 
 CAMPOS_DB = ["nombre", "contacto", "estado", "notas", "recomendado_por"]
 CAMPOS_OBLIGATORIOS = {"nombre", "contacto"}
@@ -139,5 +140,14 @@ def exportar_excel(path: str, clientes) -> None:
     ws.title = "Clientes"
     ws.append(["Nombre", "Teléfono", "Estado", "Fecha de alta", "Fecha de actualización", "Notas"])
     for c in clientes:
-        ws.append([c.nombre, c.contacto, c.estado_nombre, c.fecha_alta, c.fecha_actualizacion, c.notas])
+        ws.append(
+            [
+                c.nombre,
+                c.contacto,
+                c.estado_nombre,
+                formatear_fecha(c.fecha_alta),
+                formatear_fecha(c.fecha_actualizacion),
+                c.notas,
+            ]
+        )
     wb.save(path)

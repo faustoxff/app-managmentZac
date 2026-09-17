@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+from fechas import formatear_fecha
 from models import Cliente
 
 
@@ -37,7 +38,10 @@ class DuplicadoPopup(tk.Toplevel):
             self.tree.column(c, width=width)
         for d in duplicados:
             self.tree.insert(
-                "", "end", iid=str(d.id), values=(d.nombre, d.contacto, d.estado_nombre, d.fecha_actualizacion)
+                "",
+                "end",
+                iid=str(d.id),
+                values=(d.nombre, d.contacto, d.estado_nombre, formatear_fecha(d.fecha_actualizacion)),
             )
         self.tree.pack(padx=12, pady=6)
         if duplicados:

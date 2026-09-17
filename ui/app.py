@@ -4,6 +4,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import config
 import db
+from fechas import formatear_fecha
 from ui.api_key_popup import ApiKeyPopup
 from ui.cliente_form import ClienteForm
 from ui.estados import EstadosPopup
@@ -132,8 +133,8 @@ class App(tk.Tk):
                     c.nombre,
                     c.contacto,
                     c.estado_nombre,
-                    self._formatear_fecha(c.fecha_alta),
-                    self._formatear_fecha(c.fecha_actualizacion),
+                    formatear_fecha(c.fecha_alta),
+                    formatear_fecha(c.fecha_actualizacion),
                     c.recomendado_por,
                     c.notas,
                 ),
@@ -141,17 +142,6 @@ class App(tk.Tk):
             )
         self._clientes_actuales = clientes
         self._actualizar_label_filtros()
-
-    @staticmethod
-    def _formatear_fecha(fecha_iso: str) -> str:
-        """Solo para mostrar en la tabla: DD/MM/AAAA sin hora ni la 'T'. Lo que se guarda en
-        la DB y se usa para filtrar/ordenar sigue siendo el ISO completo, sin tocar."""
-        fecha = (fecha_iso or "").split("T")[0]
-        partes = fecha.split("-")
-        if len(partes) != 3:
-            return fecha_iso or ""
-        anio, mes, dia = partes
-        return f"{dia}/{mes}/{anio}"
 
     @staticmethod
     def _suavizar(hex_color: str) -> str:
