@@ -1,10 +1,16 @@
+import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+import config
 import db
 from ui.cliente_form import ClienteForm
 from ui.estados import EstadosPopup
 from ui.filtros import FiltrosPopup
+from ui.mapeo_excel_popup import MapeoColumnasPopup
+from ui.ocr_review_popup import OcrReviewPopup
+from ui.resumen_import_popup import ResumenImportPopup
+from ui.subida_celular_popup import SubidaCelularPopup
 
 
 class App(tk.Tk):
@@ -17,9 +23,23 @@ class App(tk.Tk):
         self.filtros: dict = {}
         self._estado_colores: dict[int, str] = {}
 
+        # Estado de "subida por celular": None mientras está apagado.
+        self.photo_server = None
+        self.cola_fotos: "queue.Queue[str] | None" = None
+        self.ocr_popup_activo = None
+        self._subida_ip = None
+        self._subida_puerto = None
+
         self._build_toolbar()
         self._build_table()
         self._refrescar()
+
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        if self.photo_server is not None:
+            self.photo_server.detener()
+        self.destroy()
 
     # ---------- construcción de UI ----------
 
@@ -33,8 +53,18 @@ class App(tk.Tk):
         tk.Button(bar, text="Filtros", command=self._abrir_filtros).pack(side="left", padx=4)
         tk.Button(bar, text="Estados", command=self._abrir_estados).pack(side="left", padx=4)
 
-        tk.Button(bar, text="Importar CSV", command=self._importar_csv).pack(side="right", padx=4)
+        # Empaquetados a la derecha en orden inverso al visual: el último en este bloque
+        # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
+        # Importar Excel, Importar por foto, Importar CSV, Exportar CSV (los dos de CSV juntos,
+        # al final, y "Subida por celular" primero).
         tk.Button(bar, text="Exportar CSV", command=self._exportar_csv).pack(side="right", padx=4)
+        tk.Button(bar, text="Importar CSV", command=self._importar_csv).pack(side="right", padx=4)
+        tk.Button(bar, text="Importar por foto", command=self._importar_foto).pack(side="right", padx=4)
+        tk.Button(bar, text="Importar Excel", command=self._importar_excel).pack(side="right", padx=4)
+        self.subida_btn = tk.Button(
+            bar, text="Subida por celular", command=self._toggle_subida_celular
+        )
+        self.subida_btn.pack(side="right", padx=4)
 
         self.filtros_label = tk.Label(self, text="", fg="gray20", anchor="w", padx=8)
         self.filtros_label.pack(fill="x")
@@ -187,3 +217,151 @@ class App(tk.Tk):
             messagebox.showerror("Error al exportar", str(exc))
             return
         messagebox.showinfo("Exportado", f"Se exportaron {len(self._clientes_actuales)} clientes.")
+
+    # ---------- Import Excel ----------
+
+    def _importar_excel(self):
+        try:
+            import excel_import
+        except ImportError:
+            messagebox.showerror(
+                "Falta una dependencia",
+                "Para importar Excel hace falta instalar openpyxl:\n\npip install openpyxl",
+            )
+            return
+
+        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+        try:
+            headers = excel_import.leer_headers(path)
+        except Exception as exc:  # noqa: BLE001 - no crashear ante un .xlsx corrupto/inválido
+            messagebox.showerror("Error al leer el Excel", str(exc))
+            return
+        if not headers:
+            messagebox.showwarning(
+                "Excel vacío", "El archivo no tiene encabezados en la primera fila."
+            )
+            return
+
+        MapeoColumnasPopup(self, headers, on_confirmar=lambda mapeo: self._procesar_excel(path, mapeo))
+
+    def _procesar_excel(self, path: str, mapeo: dict):
+        import excel_import
+
+        try:
+            filas = excel_import.parsear_filas(path, mapeo)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Error al importar", str(exc))
+            return
+
+        resultado = db.procesar_lote(filas)
+        self._refrescar()
+        ResumenImportPopup(self, resultado, on_cerrar=self._refrescar)
+
+    # ---------- Import por foto (OCR) ----------
+
+    def _importar_foto(self):
+        try:
+            import ocr_import  # noqa: F401 - solo para chequear que la dependencia está
+        except ImportError:
+            messagebox.showerror(
+                "Falta una dependencia",
+                "Para importar por foto hace falta instalar pytesseract y Pillow:\n\n"
+                "pip install pytesseract Pillow",
+            )
+            return
+
+        path = filedialog.askopenfilename(
+            filetypes=[("Imágenes", "*.jpg *.jpeg *.png"), ("Todos los archivos", "*.*")]
+        )
+        if not path:
+            return
+
+        self._procesar_foto_ocr(path)
+
+    def _procesar_foto_ocr(self, path: str):
+        """Corre el OCR sobre una foto y abre la tabla de revisión. Se usa tanto para el
+        botón manual como para las fotos que llegan por la subida desde el celular."""
+        import ocr_import
+
+        try:
+            candidatos = ocr_import.extraer_candidatos(path)
+        except ocr_import.TesseractNoDisponible as exc:
+            messagebox.showerror("Tesseract no disponible", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 - no crashear ante una imagen rara
+            messagebox.showerror("Error al procesar la imagen", str(exc))
+            return
+
+        self.ocr_popup_activo = OcrReviewPopup(
+            self,
+            candidatos,
+            on_confirmar=self._procesar_ocr,
+            on_cerrar=self._limpiar_ocr_popup_activo,
+        )
+
+    def _limpiar_ocr_popup_activo(self):
+        self.ocr_popup_activo = None
+
+    def _procesar_ocr(self, filas):
+        resultado = db.procesar_lote(filas)
+        self._refrescar()
+        ResumenImportPopup(self, resultado, on_cerrar=self._refrescar)
+
+    # ---------- Subida de fotos desde el celular ----------
+
+    def _toggle_subida_celular(self):
+        if self.photo_server is not None:
+            # ya está activo: reabre el QR por si el usuario cerró el popup sin desactivar
+            SubidaCelularPopup(
+                self, self._subida_ip, self._subida_puerto, on_desactivar=self._desactivar_subida_celular
+            )
+            return
+
+        try:
+            import photo_server
+        except ImportError:
+            messagebox.showerror(
+                "Falta una dependencia",
+                "Para esto hace falta instalar qrcode:\n\npip install qrcode",
+            )
+            return
+
+        self.cola_fotos = queue.Queue()
+        servidor = photo_server.PhotoServer(config.carpeta_fotos_pendientes(), self.cola_fotos)
+        try:
+            ip, puerto = servidor.iniciar()
+        except OSError as exc:
+            messagebox.showerror(
+                "No se pudo activar",
+                f"No se pudo levantar el servidor local:\n{exc}\n\n"
+                "Podés seguir usando 'Importar por foto' manualmente.",
+            )
+            return
+
+        self.photo_server = servidor
+        self._subida_ip, self._subida_puerto = ip, puerto
+        self.subida_btn.config(text="Subida por celular (activa)")
+
+        SubidaCelularPopup(self, ip, puerto, on_desactivar=self._desactivar_subida_celular)
+        self._revisar_cola_fotos()
+
+    def _desactivar_subida_celular(self):
+        if self.photo_server is not None:
+            self.photo_server.detener()
+        self.photo_server = None
+        self.cola_fotos = None
+        self.subida_btn.config(text="Subida por celular")
+
+    def _revisar_cola_fotos(self):
+        if self.cola_fotos is not None and self.ocr_popup_activo is None:
+            try:
+                path_foto = self.cola_fotos.get_nowait()
+            except queue.Empty:
+                path_foto = None
+            if path_foto is not None:
+                self._procesar_foto_ocr(path_foto)
+
+        if self.photo_server is not None:
+            self.after(500, self._revisar_cola_fotos)

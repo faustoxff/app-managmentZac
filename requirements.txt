@@ -1,3 +1,12 @@
-# Sin dependencias de terceros para la app (usa Tkinter y sqlite3, ambos stdlib).
+# La app base (CRUD, filtros, CSV) usa Tkinter y sqlite3 (stdlib), sin dependencias extra.
+# Estas son necesarias para las importaciones desde Excel y por foto (OCR):
+openpyxl>=3.1
+pytesseract>=0.3
+Pillow>=10.0
+qrcode>=7.4
+
 # Solo se necesita para generar el .exe:
 pyinstaller>=6.0
+
+# Importar por foto además requiere tener Tesseract-OCR instalado en el sistema
+# (no es una librería de Python, es un programa aparte) — ver README.

@@ -17,3 +17,9 @@ def get_data_dir() -> Path:
 
 
 DB_PATH = get_data_dir() / "clientes.db"
+
+
+def carpeta_fotos_pendientes() -> Path:
+    carpeta = get_data_dir() / "fotos_pendientes"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    return carpeta

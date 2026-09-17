@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 
 import db
 from models import Cliente
+from ui.duplicado_popup import DuplicadoPopup
 
 
 class ClienteForm(tk.Toplevel):
@@ -71,6 +72,22 @@ class ClienteForm(tk.Toplevel):
         recomendado_por = self.recomendado_var.get().strip()
         estado_id = next(e.id for e in self.estados if e.nombre == self.estado_var.get())
 
+        if not self.cliente:
+            duplicados = db.buscar_duplicados(nombre, contacto)
+            if duplicados:
+                DuplicadoPopup(
+                    self,
+                    duplicados,
+                    on_ver_existente=self._ver_existente,
+                    on_cargar_igual=lambda: self._guardar_final(
+                        nombre, contacto, estado_id, notas, recomendado_por
+                    ),
+                )
+                return
+
+        self._guardar_final(nombre, contacto, estado_id, notas, recomendado_por)
+
+    def _guardar_final(self, nombre, contacto, estado_id, notas, recomendado_por):
         if self.cliente:
             db.actualizar_cliente(self.cliente.id, nombre, contacto, estado_id, notas, recomendado_por)
         else:
@@ -78,3 +95,7 @@ class ClienteForm(tk.Toplevel):
 
         self.on_saved()
         self.destroy()
+
+    def _ver_existente(self, cliente_existente: Cliente):
+        self.destroy()
+        ClienteForm(self.master, on_saved=self.on_saved, cliente=cliente_existente)

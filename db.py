@@ -1,8 +1,9 @@
 """Acceso a SQLite. Cada operación abre y cierra su propia conexión (context manager)."""
 import csv
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Iterable, Optional
 
@@ -51,15 +52,25 @@ def init_db() -> None:
                 estado_id INTEGER NOT NULL REFERENCES estados(id) ON DELETE RESTRICT,
                 fecha_actualizacion TEXT NOT NULL,
                 notas TEXT,
-                recomendado_por TEXT
+                recomendado_por TEXT,
+                contacto_normalizado TEXT
             )
             """
         )
         columnas = {r["name"] for r in conn.execute("PRAGMA table_info(clientes)").fetchall()}
         if "recomendado_por" not in columnas:
             conn.execute("ALTER TABLE clientes ADD COLUMN recomendado_por TEXT")
+        if "contacto_normalizado" not in columnas:
+            conn.execute("ALTER TABLE clientes ADD COLUMN contacto_normalizado TEXT")
+            conn.execute(
+                "UPDATE clientes SET contacto_normalizado = "
+                "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(contacto, ''), ' ', ''), '-', ''), '(', ''), ')', '')"
+            )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_estado ON clientes(estado_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_fecha ON clientes(fecha_actualizacion)")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_clientes_contacto_norm ON clientes(contacto_normalizado)"
+        )
 
         count = conn.execute("SELECT COUNT(*) FROM estados").fetchone()[0]
         if count == 0:
@@ -72,6 +83,27 @@ def init_db() -> None:
 
 def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def normalizar_telefono(contacto: str) -> str:
+    """Saca espacios, guiones y paréntesis para poder comparar teléfonos con distinto formato."""
+    if not contacto:
+        return ""
+    for ch in (" ", "-", "(", ")"):
+        contacto = contacto.replace(ch, "")
+    return contacto.strip()
+
+
+def normalizar_nombre(nombre: str) -> str:
+    """Mayúsculas, sin tildes/diacríticos y con espacios múltiples colapsados, para que
+    "José García" y "JOSE GARCIA" (típico error de OCR con tildes) se detecten como el mismo
+    nombre al buscar duplicados. No se usa para guardar el nombre, solo para comparar."""
+    if not nombre:
+        return ""
+    s = nombre.strip().upper()
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return " ".join(s.split())
 
 
 # ---------- Estados ----------
@@ -164,9 +196,10 @@ def crear_cliente(
 ) -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO clientes (nombre, contacto, estado_id, fecha_actualizacion, notas, recomendado_por) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (nombre, contacto, estado_id, _now_iso(), notas, recomendado_por),
+            "INSERT INTO clientes "
+            "(nombre, contacto, estado_id, fecha_actualizacion, notas, recomendado_por, contacto_normalizado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (nombre, contacto, estado_id, _now_iso(), notas, recomendado_por, normalizar_telefono(contacto)),
         )
         return cur.lastrowid
 
@@ -182,9 +215,53 @@ def actualizar_cliente(
     with get_conn() as conn:
         conn.execute(
             "UPDATE clientes SET nombre = ?, contacto = ?, estado_id = ?, "
-            "fecha_actualizacion = ?, notas = ?, recomendado_por = ? WHERE id = ?",
-            (nombre, contacto, estado_id, _now_iso(), notas, recomendado_por, cliente_id),
+            "fecha_actualizacion = ?, notas = ?, recomendado_por = ?, contacto_normalizado = ? WHERE id = ?",
+            (
+                nombre,
+                contacto,
+                estado_id,
+                _now_iso(),
+                notas,
+                recomendado_por,
+                normalizar_telefono(contacto),
+                cliente_id,
+            ),
         )
+
+
+def buscar_duplicados(nombre: str, contacto: str) -> list[Cliente]:
+    """Chequeo no bloqueante: primero por teléfono normalizado, y si no matchea, por nombre
+    (case-insensitive, sin tildes). Se usa tanto en el alta manual como en las importaciones
+    masivas. La comparación por nombre se hace en Python (no en SQL) para poder ignorar
+    diacríticos con unicodedata, algo que SQLite no maneja de forma nativa."""
+    contacto_norm = normalizar_telefono(contacto)
+    nombre_norm = normalizar_nombre(nombre)
+
+    with get_conn() as conn:
+        if contacto_norm:
+            rows = conn.execute(
+                """
+                SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color
+                FROM clientes c JOIN estados e ON e.id = c.estado_id
+                WHERE c.contacto_normalizado = ?
+                """,
+                (contacto_norm,),
+            ).fetchall()
+            if rows:
+                return [_row_to_cliente(r) for r in rows]
+
+        if nombre_norm:
+            rows = conn.execute(
+                """
+                SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color
+                FROM clientes c JOIN estados e ON e.id = c.estado_id
+                """
+            ).fetchall()
+            coincidencias = [r for r in rows if normalizar_nombre(r["nombre"]) == nombre_norm]
+            if coincidencias:
+                return [_row_to_cliente(r) for r in coincidencias]
+
+    return []
 
 
 def cambiar_estado_cliente(cliente_id: int, estado_id: int) -> None:
@@ -275,3 +352,71 @@ def importar_csv(path: str) -> tuple[int, list[str]]:
                 errores.append(f"Fila {i}: error al importar ({exc}).")
 
     return importados, errores
+
+
+# ---------- Importación masiva genérica (Excel, OCR) ----------
+
+
+@dataclass
+class FilaImport:
+    """Una fila candidata a importar, venga de Excel o de OCR (estos últimos solo traen
+    nombre/contacto; el resto queda vacío y usa los defaults)."""
+
+    nombre: str
+    contacto: str
+    estado: str = ""
+    notas: str = ""
+    recomendado_por: str = ""
+    origen: str = ""  # info libre para mostrar en la revisión (ej. línea del Excel u OCR)
+
+
+@dataclass
+class ResultadoLote:
+    ok: int = 0
+    duplicados: list[tuple[FilaImport, list[Cliente]]] = field(default_factory=list)
+    fallidos: list[tuple[FilaImport, str]] = field(default_factory=list)
+
+
+def _resolver_estado_id(nombre_estado: str, estados_por_nombre: dict, default_id: Optional[int]) -> Optional[int]:
+    if not nombre_estado:
+        return default_id
+    return estados_por_nombre.get(nombre_estado.strip().lower(), default_id)
+
+
+def procesar_lote(filas: Iterable[FilaImport]) -> ResultadoLote:
+    """Clasifica cada fila en OK (se carga directo) / duplicado (posible, queda para revisar)
+    / fallido (falta nombre o contacto). No pide confirmación por fila: eso lo resuelve la UI
+    después, mostrando el resumen y dejando decidir uno por uno los duplicados."""
+    estados_por_nombre = {e.nombre.lower(): e.id for e in listar_estados()}
+    estado_default_id = listar_estados()[0].id if estados_por_nombre else None
+
+    resultado = ResultadoLote()
+    for fila in filas:
+        nombre = (fila.nombre or "").strip()
+        contacto = (fila.contacto or "").strip()
+        if not nombre or not contacto:
+            resultado.fallidos.append((fila, "Falta nombre o contacto"))
+            continue
+
+        dups = buscar_duplicados(nombre, contacto)
+        if dups:
+            resultado.duplicados.append((fila, dups))
+            continue
+
+        estado_id = _resolver_estado_id(fila.estado, estados_por_nombre, estado_default_id)
+        if estado_id is None:
+            resultado.fallidos.append((fila, "No hay estados configurados"))
+            continue
+
+        crear_cliente(nombre, contacto, estado_id, fila.notas, fila.recomendado_por)
+        resultado.ok += 1
+
+    return resultado
+
+
+def cargar_fila_igual(fila: FilaImport) -> None:
+    """Inserta una fila que había quedado marcada como posible duplicado, ignorando el aviso."""
+    estados_por_nombre = {e.nombre.lower(): e.id for e in listar_estados()}
+    estado_default_id = listar_estados()[0].id if estados_por_nombre else None
+    estado_id = _resolver_estado_id(fila.estado, estados_por_nombre, estado_default_id)
+    crear_cliente(fila.nombre.strip(), fila.contacto.strip(), estado_id, fila.notas, fila.recomendado_por)
