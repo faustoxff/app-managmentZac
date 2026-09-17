@@ -4,9 +4,11 @@ from tkinter import filedialog, messagebox, ttk
 
 import config
 import db
+from ui.api_key_popup import ApiKeyPopup
 from ui.cliente_form import ClienteForm
 from ui.estados import EstadosPopup
 from ui.filtros import FiltrosPopup
+from ui.ia_import_popup import IAImportPopup
 from ui.mapeo_excel_popup import MapeoColumnasPopup
 from ui.ocr_review_popup import OcrReviewPopup
 from ui.resumen_import_popup import ResumenImportPopup
@@ -30,6 +32,7 @@ class App(tk.Tk):
         self._subida_ip = None
         self._subida_puerto = None
 
+        self._build_menu()
         self._build_toolbar()
         self._build_table()
         self._refrescar()
@@ -43,6 +46,16 @@ class App(tk.Tk):
 
     # ---------- construcción de UI ----------
 
+    def _build_menu(self):
+        menubar = tk.Menu(self)
+        config_menu = tk.Menu(menubar, tearoff=0)
+        config_menu.add_command(label="Cambiar API key de IA", command=self._cambiar_api_key)
+        menubar.add_cascade(label="Configuración", menu=config_menu)
+        self.config(menu=menubar)
+
+    def _cambiar_api_key(self):
+        ApiKeyPopup(self)
+
     def _build_toolbar(self):
         bar = tk.Frame(self, pady=8, padx=8)
         bar.pack(fill="x")
@@ -52,13 +65,15 @@ class App(tk.Tk):
         tk.Button(bar, text="Borrar", command=self._borrar_cliente).pack(side="left", padx=4)
         tk.Button(bar, text="Filtros", command=self._abrir_filtros).pack(side="left", padx=4)
         tk.Button(bar, text="Estados", command=self._abrir_estados).pack(side="left", padx=4)
+        tk.Button(bar, text="Imprimir seleccionados", command=self._imprimir).pack(side="left", padx=4)
 
         # Empaquetados a la derecha en orden inverso al visual: el último en este bloque
         # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
-        # Importar Excel, Importar por foto, Importar CSV, Exportar CSV (los dos de CSV juntos,
-        # al final, y "Subida por celular" primero).
+        # Importar Excel, Importar por foto, Importar CSV, Exportar CSV, Exportar Excel.
+        tk.Button(bar, text="Exportar Excel", command=self._exportar_excel).pack(side="right", padx=4)
         tk.Button(bar, text="Exportar CSV", command=self._exportar_csv).pack(side="right", padx=4)
         tk.Button(bar, text="Importar CSV", command=self._importar_csv).pack(side="right", padx=4)
+        tk.Button(bar, text="Importar con IA", command=self._importar_ia).pack(side="right", padx=4)
         tk.Button(bar, text="Importar por foto", command=self._importar_foto).pack(side="right", padx=4)
         tk.Button(bar, text="Importar Excel", command=self._importar_excel).pack(side="right", padx=4)
         self.subida_btn = tk.Button(
@@ -70,15 +85,16 @@ class App(tk.Tk):
         self.filtros_label.pack(fill="x")
 
     def _build_table(self):
-        cols = ("nombre", "contacto", "estado", "fecha", "recomendado_por", "notas")
+        cols = ("nombre", "contacto", "estado", "fecha_alta", "fecha", "recomendado_por", "notas")
         frame = tk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
-        self.tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="browse")
+        self.tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
         headers = {
             "nombre": ("Nombre", 180),
             "contacto": ("Contacto", 160),
-            "estado": ("Estado", 130),
+            "estado": ("Estado", 110),
+            "fecha_alta": ("Fecha de alta", 140),
             "fecha": ("Última actualización", 150),
             "recomendado_por": ("Recomendado por", 150),
             "notas": ("Notas", 230),
@@ -92,7 +108,9 @@ class App(tk.Tk):
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-        self.tree.bind("<Double-1>", lambda e: self._editar_cliente())
+        self._combo_estado_activo: ttk.Combobox | None = None
+        self.tree.bind("<Button-1>", self._click_tabla)
+        self.tree.bind("<Double-1>", self._doble_click_tabla)
 
     # ---------- datos ----------
 
@@ -116,6 +134,7 @@ class App(tk.Tk):
                     c.nombre,
                     c.contacto,
                     c.estado_nombre,
+                    c.fecha_alta,
                     c.fecha_actualizacion,
                     c.recomendado_por,
                     c.notas,
@@ -151,6 +170,72 @@ class App(tk.Tk):
     def _seleccion_id(self):
         sel = self.tree.selection()
         return int(sel[0]) if sel else None
+
+    def _seleccion_ids(self) -> list[int]:
+        return [int(i) for i in self.tree.selection()]
+
+    # ---------- edición inline del estado ----------
+
+    def _click_tabla(self, event):
+        if self._combo_estado_activo is not None:
+            self._combo_estado_activo.destroy()
+            self._combo_estado_activo = None
+
+        region = self.tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        columna = self.tree.identify_column(event.x)
+        fila_iid = self.tree.identify_row(event.y)
+        if not fila_iid:
+            return
+        col_index = int(columna.replace("#", "")) - 1
+        if self.tree["columns"][col_index] != "estado":
+            return
+
+        self._abrir_editor_estado_inline(fila_iid, columna)
+
+    def _doble_click_tabla(self, event):
+        # Si el doble clic cae sobre la celda de estado, no abrimos el formulario completo:
+        # el clic simple ya deja elegir el estado con el dropdown inline.
+        columna = self.tree.identify_column(event.x)
+        if columna:
+            col_index = int(columna.replace("#", "")) - 1
+            if self.tree["columns"][col_index] == "estado":
+                return
+        self._editar_cliente()
+
+    def _abrir_editor_estado_inline(self, fila_iid: str, columna: str):
+        bbox = self.tree.bbox(fila_iid, columna)
+        if not bbox:
+            return
+        x, y, w, h = bbox
+
+        cliente_id = int(fila_iid)
+        cliente = next((c for c in self._clientes_actuales if c.id == cliente_id), None)
+        if not cliente:
+            return
+
+        estados = db.listar_estados()
+        var = tk.StringVar(value=cliente.estado_nombre)
+        combo = ttk.Combobox(
+            self.tree, textvariable=var, values=[e.nombre for e in estados], state="readonly"
+        )
+        combo.place(x=x, y=y, width=w, height=h)
+        combo.focus_set()
+        self._combo_estado_activo = combo
+
+        def confirmar(event=None):
+            nuevo_nombre = var.get()
+            combo.destroy()
+            if self._combo_estado_activo is combo:
+                self._combo_estado_activo = None
+            nuevo_estado = next((e for e in estados if e.nombre == nuevo_nombre), None)
+            if nuevo_estado and nuevo_estado.id != cliente.estado_id:
+                db.cambiar_estado_cliente(cliente_id, nuevo_estado.id)
+                self._refrescar()
+
+        combo.bind("<<ComboboxSelected>>", confirmar)
+        combo.bind("<FocusOut>", lambda e: combo.destroy())
 
     # ---------- acciones ----------
 
@@ -217,6 +302,48 @@ class App(tk.Tk):
             messagebox.showerror("Error al exportar", str(exc))
             return
         messagebox.showinfo("Exportado", f"Se exportaron {len(self._clientes_actuales)} clientes.")
+
+    def _exportar_excel(self):
+        if not self._clientes_actuales:
+            messagebox.showinfo("Sin datos", "No hay clientes para exportar en la vista actual.")
+            return
+        try:
+            import excel_import
+        except ImportError:
+            messagebox.showerror(
+                "Falta una dependencia",
+                "Para exportar a Excel hace falta instalar openpyxl:\n\npip install openpyxl",
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], initialfile="clientes.xlsx"
+        )
+        if not path:
+            return
+        try:
+            excel_import.exportar_excel(path, self._clientes_actuales)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Error al exportar", str(exc))
+            return
+        messagebox.showinfo("Exportado", f"Se exportaron {len(self._clientes_actuales)} clientes.")
+
+    def _imprimir(self):
+        ids_seleccionados = set(self._seleccion_ids())
+        if ids_seleccionados:
+            clientes = [c for c in self._clientes_actuales if c.id in ids_seleccionados]
+        else:
+            clientes = self._clientes_actuales
+
+        if not clientes:
+            messagebox.showinfo("Sin datos", "No hay clientes para imprimir en la vista actual.")
+            return
+
+        try:
+            import impresion
+
+            impresion.imprimir_clientes(clientes)
+        except Exception as exc:  # noqa: BLE001 - no crashear si falla abrir el navegador
+            messagebox.showerror("Error al generar la vista de impresión", str(exc))
 
     # ---------- Import Excel ----------
 
@@ -308,6 +435,27 @@ class App(tk.Tk):
         resultado = db.procesar_lote(filas)
         self._refrescar()
         ResumenImportPopup(self, resultado, on_cerrar=self._refrescar)
+
+    # ---------- Import con IA ----------
+
+    def _importar_ia(self):
+        try:
+            import ia_import  # noqa: F401 - solo para chequear que la dependencia está
+        except ImportError:
+            messagebox.showerror(
+                "Falta una dependencia",
+                "Para importar con IA hace falta instalar anthropic:\n\npip install anthropic",
+            )
+            return
+        IAImportPopup(self, on_resultado=self._on_resultado_ia)
+
+    def _on_resultado_ia(self, candidatos):
+        self.ocr_popup_activo = OcrReviewPopup(
+            self,
+            candidatos,
+            on_confirmar=self._procesar_ocr,
+            on_cerrar=self._limpiar_ocr_popup_activo,
+        )
 
     # ---------- Subida de fotos desde el celular ----------
 

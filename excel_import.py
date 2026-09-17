@@ -130,3 +130,14 @@ def parsear_filas(path: str, mapeo: dict) -> list[FilaImport]:
             )
         )
     return resultado
+
+
+def exportar_excel(path: str, clientes) -> None:
+    """Exporta la vista actual (ya filtrada por el llamador) a un .xlsx."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Clientes"
+    ws.append(["Nombre", "Teléfono", "Estado", "Fecha de alta", "Fecha de actualización", "Notas"])
+    for c in clientes:
+        ws.append([c.nombre, c.contacto, c.estado_nombre, c.fecha_alta, c.fecha_actualizacion, c.notas])
+    wb.save(path)

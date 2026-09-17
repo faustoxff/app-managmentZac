@@ -11,12 +11,24 @@ from config import DB_PATH
 from models import Cliente, Estado
 
 ESTADOS_SEED = [
-    ("Nuevo", "#3b82f6"),
-    ("Contactado", "#f59e0b"),
-    ("En negociación", "#a855f7"),
-    ("Cerrado", "#22c55e"),
-    ("Perdido", "#ef4444"),
+    ("Descartado", "#9ca3af"),
+    ("OK", "#22c55e"),
+    ("Cliente", "#3b82f6"),
+    ("Viene", "#eab308"),
+    ("Esperar", "#f97316"),
 ]
+ESTADOS_SEED_NOMBRES = {nombre for nombre, _ in ESTADOS_SEED}
+
+# Migración one-time del esquema de estados viejo. Cualquier estado que no sea uno de los
+# ESTADOS_SEED de arriba (incluye estados custom que el usuario haya creado/renombrado) migra
+# sus clientes a "Esperar" por defecto, salvo que tenga un mapeo más específico acá.
+MAPEO_ESTADOS_MIGRACION = {
+    "Nuevo": "Esperar",
+    "Contactado": "Viene",
+    "En negociación": "Esperar",
+    "Cerrado": "Cliente",
+    "Perdido": "Descartado",
+}
 
 
 @contextmanager
@@ -53,7 +65,8 @@ def init_db() -> None:
                 fecha_actualizacion TEXT NOT NULL,
                 notas TEXT,
                 recomendado_por TEXT,
-                contacto_normalizado TEXT
+                contacto_normalizado TEXT,
+                fecha_alta TEXT
             )
             """
         )
@@ -66,19 +79,52 @@ def init_db() -> None:
                 "UPDATE clientes SET contacto_normalizado = "
                 "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(contacto, ''), ' ', ''), '-', ''), '(', ''), ')', '')"
             )
+        if "fecha_alta" not in columnas:
+            conn.execute("ALTER TABLE clientes ADD COLUMN fecha_alta TEXT")
+            # No hay dato real de cuándo se dio de alta un registro viejo: mejor aproximación
+            # disponible es su fecha_actualizacion actual.
+            conn.execute("UPDATE clientes SET fecha_alta = fecha_actualizacion WHERE fecha_alta IS NULL")
+
+        # Nombres siempre en mayúscula: normaliza los que ya estaban en la DB de antes de
+        # este cambio (idempotente, no hace nada si ya están en mayúscula).
+        conn.execute("UPDATE clientes SET nombre = UPPER(nombre) WHERE nombre != UPPER(nombre)")
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_estado ON clientes(estado_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_fecha ON clientes(fecha_actualizacion)")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_clientes_contacto_norm ON clientes(contacto_normalizado)"
         )
 
-        count = conn.execute("SELECT COUNT(*) FROM estados").fetchone()[0]
-        if count == 0:
-            for orden, (nombre, color) in enumerate(ESTADOS_SEED):
-                conn.execute(
-                    "INSERT INTO estados (nombre, color, orden) VALUES (?, ?, ?)",
-                    (nombre, color, orden),
-                )
+        _migrar_estados_a_nuevo_esquema(conn)
+
+
+def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
+    """Crea los ESTADOS_SEED actuales si faltan, y migra los clientes que apunten a un estado
+    que no sea uno de esos 5 (viejo esquema, o un estado custom que el usuario haya creado)
+    usando MAPEO_ESTADOS_MIGRACION, con "Esperar" como default si no hay mapeo específico.
+    Es idempotente: en una DB ya migrada no encuentra nada para mover."""
+    existentes = {r["nombre"]: r["id"] for r in conn.execute("SELECT id, nombre FROM estados").fetchall()}
+
+    for orden, (nombre, color) in enumerate(ESTADOS_SEED):
+        if nombre not in existentes:
+            cur = conn.execute(
+                "INSERT INTO estados (nombre, color, orden) VALUES (?, ?, ?)", (nombre, color, orden)
+            )
+            existentes[nombre] = cur.lastrowid
+        else:
+            conn.execute("UPDATE estados SET orden = ? WHERE id = ?", (orden, existentes[nombre]))
+
+    id_esperar = existentes["Esperar"]
+
+    viejos = conn.execute("SELECT id, nombre FROM estados").fetchall()
+    for row in viejos:
+        nombre_viejo, id_viejo = row["nombre"], row["id"]
+        if nombre_viejo in ESTADOS_SEED_NOMBRES:
+            continue  # ya es uno de los estados actuales, no se toca
+        nombre_nuevo = MAPEO_ESTADOS_MIGRACION.get(nombre_viejo, "Esperar")
+        id_nuevo = existentes.get(nombre_nuevo, id_esperar)
+        conn.execute("UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (id_nuevo, id_viejo))
+        conn.execute("DELETE FROM estados WHERE id = ?", (id_viejo,))
 
 
 def _now_iso() -> str:
@@ -151,6 +197,7 @@ def _row_to_cliente(r: sqlite3.Row) -> Cliente:
         contacto=r["contacto"] or "",
         estado_id=r["estado_id"],
         fecha_actualizacion=r["fecha_actualizacion"],
+        fecha_alta=r["fecha_alta"] or r["fecha_actualizacion"],
         notas=r["notas"] or "",
         recomendado_por=r["recomendado_por"] or "",
         estado_nombre=r["estado_nombre"],
@@ -194,12 +241,14 @@ def listar_clientes(
 def crear_cliente(
     nombre: str, contacto: str, estado_id: int, notas: str = "", recomendado_por: str = ""
 ) -> int:
+    nombre = nombre.strip().upper()
     with get_conn() as conn:
+        ahora = _now_iso()
         cur = conn.execute(
             "INSERT INTO clientes "
-            "(nombre, contacto, estado_id, fecha_actualizacion, notas, recomendado_por, contacto_normalizado) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (nombre, contacto, estado_id, _now_iso(), notas, recomendado_por, normalizar_telefono(contacto)),
+            "(nombre, contacto, estado_id, fecha_actualizacion, fecha_alta, notas, recomendado_por, "
+            "contacto_normalizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (nombre, contacto, estado_id, ahora, ahora, notas, recomendado_por, normalizar_telefono(contacto)),
         )
         return cur.lastrowid
 
@@ -212,7 +261,9 @@ def actualizar_cliente(
     notas: str,
     recomendado_por: str = "",
 ) -> None:
+    nombre = nombre.strip().upper()
     with get_conn() as conn:
+        # fecha_alta NO se toca acá a propósito: se setea una sola vez, al crear el registro.
         conn.execute(
             "UPDATE clientes SET nombre = ?, contacto = ?, estado_id = ?, "
             "fecha_actualizacion = ?, notas = ?, recomendado_por = ?, contacto_normalizado = ? WHERE id = ?",

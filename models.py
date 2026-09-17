@@ -17,6 +17,7 @@ class Cliente:
     contacto: str
     estado_id: int
     fecha_actualizacion: str
+    fecha_alta: str = ""
     notas: str = ""
     recomendado_por: str = ""
     # Campos de conveniencia, se rellenan al leer con JOIN
