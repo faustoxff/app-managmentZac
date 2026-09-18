@@ -6,6 +6,7 @@ import config
 import db
 from fechas import formatear_fecha
 from ui.api_key_popup import ApiKeyPopup
+from ui.backup_popup import BackupPopup
 from ui.cliente_form import ClienteForm
 from ui.estados import EstadosPopup
 from ui.filtros import FiltrosPopup
@@ -43,6 +44,15 @@ class App(tk.Tk):
     def _on_close(self):
         if self.photo_server is not None:
             self.photo_server.detener()
+        if config.obtener_backup_automatico() and config.obtener_neon_connection_string():
+            # Backup sincrónico a propósito acá: la ventana se está por cerrar de todos modos,
+            # así que no hace falta un hilo aparte — solo que no bloquee más de unos segundos.
+            import backup
+
+            try:
+                backup.hacer_backup_ahora()
+            except backup.BackupError:
+                pass  # no impedimos cerrar la app por esto
         self.destroy()
 
     # ---------- construcción de UI ----------
@@ -51,8 +61,12 @@ class App(tk.Tk):
         menubar = tk.Menu(self)
         config_menu = tk.Menu(menubar, tearoff=0)
         config_menu.add_command(label="Configurar IA", command=self._cambiar_api_key)
+        config_menu.add_command(label="Backup en la nube (Neon)", command=self._abrir_backup)
         menubar.add_cascade(label="Configuración", menu=config_menu)
         self.config(menu=menubar)
+
+    def _abrir_backup(self):
+        BackupPopup(self)
 
     def _cambiar_api_key(self):
         ApiKeyPopup(self)

@@ -1,10 +1,11 @@
-# La app base (CRUD, filtros, CSV) usa Tkinter y sqlite3 (stdlib), sin dependencias extra.
+# La app base (CRUD, filtros) usa Tkinter y sqlite3 (stdlib), sin dependencias extra.
 # Estas son necesarias para las importaciones desde Excel y por foto (OCR):
 openpyxl>=3.1
 pytesseract>=0.3
 Pillow>=10.0
 qrcode>=7.4
 openai>=1.50
+psycopg2-binary>=2.9  # sincronización con Neon (opcional, no rompe nada si no se configura)
 
 # Solo se necesita para generar el .exe:
 pyinstaller>=6.0

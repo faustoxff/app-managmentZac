@@ -72,3 +72,25 @@ def guardar_modelo_ia(modelo: str) -> None:
     datos = _leer_config()
     datos["modelo_ia"] = modelo.strip() or MODELO_IA_DEFAULT
     _escribir_config(datos)
+
+
+def obtener_neon_connection_string() -> str:
+    """Cadena de conexión de Neon (postgres://usuario:password@host/db) para el backup en la
+    nube. Se consigue en el panel de Neon (Connection Details). Vacío si nunca se configuró."""
+    return _leer_config().get("neon_connection_string", "")
+
+
+def guardar_neon_connection_string(connection_string: str) -> None:
+    datos = _leer_config()
+    datos["neon_connection_string"] = connection_string.strip()
+    _escribir_config(datos)
+
+
+def obtener_backup_automatico() -> bool:
+    return bool(_leer_config().get("backup_automatico", False))
+
+
+def guardar_backup_automatico(activo: bool) -> None:
+    datos = _leer_config()
+    datos["backup_automatico"] = bool(activo)
+    _escribir_config(datos)
