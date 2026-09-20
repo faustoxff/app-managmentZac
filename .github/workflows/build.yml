@@ -3,7 +3,11 @@ name: Build ejecutables
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write  # necesario para que el job "release" pueda crear la GitHub Release
 
 jobs:
   build-windows:
@@ -55,3 +59,20 @@ jobs:
         with:
           name: GestorClientes-linux
           path: dist/GestorClientes
+
+  release:
+    # Solo corre cuando el push fue un tag vX.Y.Z (no en cada push a main). Crea la GitHub
+    # Release y le adjunta el .exe — esto es lo que updater.py va a consultar para saber si
+    # hay una versión nueva disponible.
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GestorClientes-windows
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/GestorClientes.exe
+          generate_release_notes: true

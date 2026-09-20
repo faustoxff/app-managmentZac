@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox, ttk
 import config
 import db
 from fechas import formatear_fecha
+from ui.actualizacion_popup import ActualizacionPopup
 from ui.api_key_popup import ApiKeyPopup
 from ui.backup_popup import BackupPopup
 from ui.cliente_form import ClienteForm
@@ -66,6 +67,11 @@ class App(tk.Tk):
         config_menu.add_command(label="Configurar IA", command=self._cambiar_api_key)
         config_menu.add_command(label="Backup en la nube (Neon)", command=self._abrir_backup)
         menubar.add_cascade(label="Configuración", menu=config_menu)
+
+        ayuda_menu = tk.Menu(menubar, tearoff=0)
+        ayuda_menu.add_command(label="Buscar actualización", command=self._buscar_actualizacion)
+        menubar.add_cascade(label="Ayuda", menu=ayuda_menu)
+
         self.config(menu=menubar)
 
     def _abrir_backup(self):
@@ -73,6 +79,9 @@ class App(tk.Tk):
 
     def _cambiar_api_key(self):
         ApiKeyPopup(self)
+
+    def _buscar_actualizacion(self):
+        ActualizacionPopup(self)
 
     def _build_toolbar(self):
         bar = tk.Frame(self, pady=8, padx=8)

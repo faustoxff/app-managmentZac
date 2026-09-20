@@ -89,6 +89,39 @@ Los ejecutables generados quedan como *artifacts* de esa ejecución (pestaña Ac
 correspondiente → sección Artifacts), listos para descargar sin necesitar Windows en la máquina
 local.
 
+### Publicar una nueva versión (GitHub Release)
+
+Además de compilar en cada push a `main`, el workflow crea automáticamente una **GitHub
+Release** cuando se pushea un tag con formato `vX.Y.Z`, con el `.exe` adjunto como asset:
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+Eso es lo que consulta la función de auto-actualización de la app (`updater.py`, menú
+Ayuda → "Buscar actualización"): compara `version.__version__` contra el tag de la última
+release. Al pushear un tag nuevo, acordate de subir también `version.__version__` en
+`version.py` a ese mismo número — si no, la app no va a detectar la actualización como más
+nueva.
+
+### Auto-actualización — requiere permisos de escritura en su propia carpeta
+
+El `.exe` se reemplaza a sí mismo al actualizar (descarga la versión nueva y usa un script
+`.bat` temporal para hacer el reemplazo, ya que un `.exe` no puede sobrescribirse mientras
+sigue corriendo). Para que esto funcione, la carpeta donde vive `GestorClientes.exe` necesita
+permisos de escritura para el usuario normal de Windows.
+
+**Evitar instalarlo en `C:\Program Files\`** (ahí Windows exige permisos de administrador para
+escribir, y la actualización va a fallar silenciosamente en el paso de reemplazo). Se
+recomienda dejarlo en una carpeta de usuario normal — el Escritorio, Documentos, o una carpeta
+propia como `C:\Users\<usuario>\GestorClientes\` — igual que ya se hace con los datos de la
+app, que viven en `%APPDATA%\GestorClientes\` en vez de junto al ejecutable.
+
+Si la actualización falla por permisos, la app se lo va a decir en un mensaje de error en vez
+de romperse — pero de todos modos, correr desde una carpeta de usuario evita el problema
+directamente.
+
 ## Funcionalidad
 
 - Alta, edición, borrado y cambio de estado de clientes.
@@ -108,3 +141,6 @@ local.
   antes de confirmar la carga. Ver la sección de instalación de Tesseract más arriba.
 - **Subida por celular**: sacá la foto directo desde el teléfono (mismo WiFi, sin cables ni
   apps) y se procesa sola con el mismo OCR. Ver sección dedicada más arriba.
+- **Auto-actualización** (menú Ayuda → "Buscar actualización"): consulta si hay una versión
+  más nueva publicada en GitHub Releases y, si el usuario confirma, descarga y reemplaza el
+  `.exe` sola. Ver la sección de "Auto-actualización" más arriba sobre dónde instalarla.
