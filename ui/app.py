@@ -9,6 +9,7 @@ from ui.api_key_popup import ApiKeyPopup
 from ui.backup_popup import BackupPopup
 from ui.cliente_form import ClienteForm
 from ui.estados import EstadosPopup
+from ui.editar_lote_popup import EditarLotePopup
 from ui.filtros import FiltrosPopup
 from ui.ia_import_popup import IAImportPopup
 from ui.mapeo_excel_popup import MapeoColumnasPopup
@@ -26,6 +27,8 @@ class App(tk.Tk):
 
         self.filtros: dict = {}
         self._estado_colores: dict[int, str] = {}
+        self.busqueda_rapida = ""
+        self._debounce_id = None
 
         # Estado de "subida por celular": None mientras está apagado.
         self.photo_server = None
@@ -81,6 +84,9 @@ class App(tk.Tk):
         tk.Button(bar, text="Filtros", command=self._abrir_filtros).pack(side="left", padx=4)
         tk.Button(bar, text="Estados", command=self._abrir_estados).pack(side="left", padx=4)
         tk.Button(bar, text="Imprimir seleccionados", command=self._imprimir).pack(side="left", padx=4)
+        tk.Button(bar, text="Editar seleccionados", command=self._editar_seleccionados).pack(
+            side="left", padx=4
+        )
 
         # Empaquetados a la derecha en orden inverso al visual: el último en este bloque
         # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
@@ -93,6 +99,18 @@ class App(tk.Tk):
             bar, text="Subida por celular", command=self._toggle_subida_celular
         )
         self.subida_btn.pack(side="right", padx=4)
+
+        busqueda_frame = tk.Frame(self, pady=(0), padx=8)
+        busqueda_frame.pack(fill="x")
+        tk.Label(busqueda_frame, text="Buscar:").pack(side="left")
+        self.busqueda_var = tk.StringVar()
+        self.busqueda_var.trace_add("write", self._on_busqueda_tecla)
+        tk.Entry(busqueda_frame, textvariable=self.busqueda_var, width=30).pack(
+            side="left", padx=(6, 0)
+        )
+        tk.Label(
+            busqueda_frame, text="(nombre o teléfono — convive con el popup de Filtros)", fg="gray40"
+        ).pack(side="left", padx=(8, 0))
 
         self.filtros_label = tk.Label(self, text="", fg="gray20", anchor="w", padx=8)
         self.filtros_label.pack(fill="x")
@@ -125,14 +143,33 @@ class App(tk.Tk):
         self.tree.bind("<Button-1>", self._click_tabla)
         self.tree.bind("<Double-1>", self._doble_click_tabla)
 
+    # ---------- búsqueda rápida ----------
+
+    def _on_busqueda_tecla(self, *_args):
+        """Debounce: cada tecla cancela el after() pendiente y agenda uno nuevo. Si el usuario
+        sigue tipeando, nunca llega a dispararse — recién consulta la DB 300ms después de la
+        última tecla, no en cada una."""
+        if self._debounce_id is not None:
+            self.after_cancel(self._debounce_id)
+        self._debounce_id = self.after(300, self._aplicar_busqueda_rapida)
+
+    def _aplicar_busqueda_rapida(self):
+        self._debounce_id = None
+        self.busqueda_rapida = self.busqueda_var.get().strip()
+        self._refrescar()
+
     # ---------- datos ----------
 
     def _refrescar(self):
+        # La búsqueda rápida, si tiene texto, pisa el texto del popup de Filtros para esta
+        # consulta (pero el estado/fecha del popup se siguen respetando). Si está vacía, se
+        # vuelve a usar lo que haya quedado cargado en el popup.
+        texto_efectivo = self.busqueda_rapida or self.filtros.get("texto")
         clientes = db.listar_clientes(
             estado_id=self.filtros.get("estado_id"),
             fecha_desde=self.filtros.get("fecha_desde"),
             fecha_hasta=self.filtros.get("fecha_hasta"),
-            texto=self.filtros.get("texto"),
+            texto=texto_efectivo,
         )
         self.tree.delete(*self.tree.get_children())
         for c in clientes:
@@ -338,6 +375,14 @@ class App(tk.Tk):
             impresion.imprimir_clientes(clientes)
         except Exception as exc:  # noqa: BLE001 - no crashear si falla abrir el navegador
             messagebox.showerror("Error al generar la vista de impresión", str(exc))
+
+    def _editar_seleccionados(self):
+        ids_seleccionados = set(self._seleccion_ids())
+        if not ids_seleccionados:
+            messagebox.showinfo("Seleccionar", "Elegí uno o más clientes para editar.")
+            return
+        clientes = [c for c in self._clientes_actuales if c.id in ids_seleccionados]
+        EditarLotePopup(self, clientes, on_guardado=self._refrescar)
 
     # ---------- Import Excel ----------
 

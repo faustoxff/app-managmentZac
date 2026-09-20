@@ -16,6 +16,7 @@ ESTADOS_SEED = [
     ("Cliente", "#3b82f6"),
     ("Viene", "#eab308"),
     ("Esperar", "#f97316"),
+    ("No contesta", "#ef4444"),
 ]
 ESTADOS_SEED_NOMBRES = {nombre for nombre, _ in ESTADOS_SEED}
 
@@ -85,9 +86,14 @@ def init_db() -> None:
             # disponible es su fecha_actualizacion actual.
             conn.execute("UPDATE clientes SET fecha_alta = fecha_actualizacion WHERE fecha_alta IS NULL")
 
-        # Nombres siempre en mayúscula: normaliza los que ya estaban en la DB de antes de
-        # este cambio (idempotente, no hace nada si ya están en mayúscula).
-        conn.execute("UPDATE clientes SET nombre = UPPER(nombre) WHERE nombre != UPPER(nombre)")
+        # Nombres siempre en mayúscula y sin tildes: normaliza los que ya estaban en la DB de
+        # antes de este cambio. SQLite no tiene una función nativa para sacar tildes (no hay
+        # equivalente de unicodedata.normalize en SQL puro), así que se hace en Python:
+        # traemos los nombres y sólo tocamos los que realmente cambian (idempotente).
+        for row in conn.execute("SELECT id, nombre FROM clientes").fetchall():
+            limpio = normalizar_nombre(row["nombre"])
+            if limpio != row["nombre"]:
+                conn.execute("UPDATE clientes SET nombre = ? WHERE id = ?", (limpio, row["id"]))
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_estado ON clientes(estado_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_clientes_fecha ON clientes(fecha_actualizacion)")
@@ -166,9 +172,10 @@ def normalizar_telefono(contacto: str) -> str:
 
 
 def normalizar_nombre(nombre: str) -> str:
-    """Mayúsculas, sin tildes/diacríticos y con espacios múltiples colapsados, para que
-    "José García" y "JOSE GARCIA" (típico error de OCR con tildes) se detecten como el mismo
-    nombre al buscar duplicados. No se usa para guardar el nombre, solo para comparar."""
+    """Mayúsculas, sin tildes/diacríticos y con espacios múltiples colapsados. Se usa TANTO
+    para guardar el nombre en la DB (crear_cliente/actualizar_cliente) como para compararlo al
+    buscar duplicados — así "José García" y "JOSE GARCIA" (típico error de OCR con tildes)
+    quedan literalmente como el mismo string guardado, no solo "detectados como iguales"."""
     if not nombre:
         return ""
     s = nombre.strip().upper()
@@ -253,9 +260,9 @@ def listar_clientes(
         query += " AND c.fecha_actualizacion <= ?"
         params.append(fecha_hasta + "T23:59:59")
     if texto:
-        query += " AND (c.nombre LIKE ? OR c.notas LIKE ? OR c.recomendado_por LIKE ?)"
+        query += " AND (c.nombre LIKE ? OR c.contacto LIKE ? OR c.notas LIKE ? OR c.recomendado_por LIKE ?)"
         like = f"%{texto}%"
-        params.extend([like, like, like])
+        params.extend([like, like, like, like])
     query += " ORDER BY c.fecha_actualizacion DESC"
 
     with get_conn() as conn:
@@ -266,7 +273,7 @@ def listar_clientes(
 def crear_cliente(
     nombre: str, contacto: str, estado_id: int, notas: str = "", recomendado_por: str = ""
 ) -> int:
-    nombre = nombre.strip().upper()
+    nombre = normalizar_nombre(nombre)
     with get_conn() as conn:
         ahora = _now_iso()
         cur = conn.execute(
@@ -286,7 +293,7 @@ def actualizar_cliente(
     notas: str,
     recomendado_por: str = "",
 ) -> None:
-    nombre = nombre.strip().upper()
+    nombre = normalizar_nombre(nombre)
     with get_conn() as conn:
         # fecha_alta NO se toca acá a propósito: se setea una sola vez, al crear el registro.
         conn.execute(

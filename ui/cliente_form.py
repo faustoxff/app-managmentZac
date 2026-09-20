@@ -29,7 +29,8 @@ class ClienteForm(tk.Toplevel):
         tk.Label(self, text="Nombre *").grid(row=0, column=0, sticky="w", **pad)
         self.nombre_var = tk.StringVar(value=cliente.nombre if cliente else "")
         self.nombre_var.trace_add("write", self._forzar_mayusculas)
-        tk.Entry(self, textvariable=self.nombre_var, width=40).grid(row=0, column=1, **pad)
+        self.nombre_entry = tk.Entry(self, textvariable=self.nombre_var, width=40)
+        self.nombre_entry.grid(row=0, column=1, **pad)
 
         tk.Label(self, text="Contacto").grid(row=1, column=0, sticky="w", **pad)
         self.contacto_var = tk.StringVar(value=cliente.contacto if cliente else "")
@@ -57,11 +58,22 @@ class ClienteForm(tk.Toplevel):
         if cliente:
             self.notas_text.insert("1.0", cliente.notas)
         self.notas_text.grid(row=4, column=1, **pad)
+        # Por default, Tab en un Text de Tkinter inserta una tabulación en vez de mover el
+        # foco (a diferencia de un Entry) — acá lo pisamos para que vaya directo a Guardar y
+        # se pueda cargar un cliente entero sin tocar el mouse.
+        self.notas_text.bind("<Tab>", self._tab_a_guardar)
 
         btn_frame = tk.Frame(self)
         btn_frame.grid(row=5, column=0, columnspan=2, pady=10)
-        tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12).pack(side="left", padx=5)
+        self.guardar_btn = tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12)
+        self.guardar_btn.pack(side="left", padx=5)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=5)
+
+        self.nombre_entry.focus_set()
+
+    def _tab_a_guardar(self, event):
+        self.guardar_btn.focus_set()
+        return "break"  # evita que el Text inserte una tabulación
 
     def _forzar_mayusculas(self, *_args):
         """Se ve en mayúscula mientras se escribe, no solo al guardar (db.crear_cliente ya lo
