@@ -71,7 +71,10 @@ class RestaurarBackupPopup(tk.Toplevel):
         try:
             backup.restaurar_backup(nombre)
         except backup.BackupError as exc:
-            self.after(0, lambda: self._on_error(str(exc)))
+            # Python borra `exc` al salir del except — self.after difiere la lambda, así que
+            # hay que copiar el texto a una variable normal antes o explota con NameError.
+            mensaje = str(exc)
+            self.after(0, lambda: self._on_error(mensaje))
             return
         self.after(0, self._on_ok)
 

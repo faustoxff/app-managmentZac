@@ -33,12 +33,18 @@ class ActualizacionPopup(tk.Toplevel):
 
         try:
             actualizacion = updater.verificar_actualizacion()
-        except updater.NoSePudoComprobar as exc:
-            self.after(0, lambda: self._on_busqueda_fallo(str(exc)))
+        except updater.NoSePudoComprobar:
+            self.after(0, self._on_busqueda_fallo)
+            return
+        except Exception:  # noqa: BLE001 - cualquier otra falla no debe dejar el popup
+            # trabado para siempre en "Buscando actualizaciones..." sin avisar nada.
+            self.after(0, self._on_busqueda_fallo)
             return
         self.after(0, lambda: self._on_busqueda_lista(actualizacion))
 
-    def _on_busqueda_fallo(self, detalle: str):
+    def _on_busqueda_fallo(self):
+        if not self.winfo_exists():
+            return  # el popup se cerró mientras el hilo de fondo todavía buscaba
         self.estado_label.config(
             text="No se pudo comprobar si hay una actualización.\n"
             "Revisá tu conexión a internet e intentá de nuevo más tarde."
@@ -89,18 +95,20 @@ class ActualizacionPopup(tk.Toplevel):
             destino = updater.descargar_actualizacion(
                 self._actualizacion.url_descarga, self._actualizacion.tamano, on_progreso
             )
-        except OSError as exc:
-            self.after(0, lambda: self._on_error(str(exc)))
-            return
-
-        try:
             updater.aplicar_actualizacion(destino)
-            # aplicar_actualizacion() llama sys.exit() si todo salió bien — si volvemos acá
-            # fue porque no estamos empaquetados (RuntimeError ya capturado abajo).
-        except RuntimeError as exc:
-            self.after(0, lambda: self._on_error(str(exc)))
+            # aplicar_actualizacion() llama os._exit() si todo salió bien — si volvemos acá fue
+            # porque no estamos empaquetados (RuntimeError, capturada abajo junto con
+            # cualquier otra falla de la descarga o el reemplazo).
+        except Exception as exc:  # noqa: BLE001 - cualquier falla acá (red, disco lleno,
+            # permisos, lo que sea) tiene que mostrarse, nunca dejar la barra de progreso
+            # trabada para siempre sin explicación.
+            mensaje = str(exc)  # Python borra `exc` al salir del except — hay que copiar el
+            # texto a una variable normal antes de que la lambda difierida (self.after) lo use.
+            self.after(0, lambda: self._on_error(mensaje))
 
     def _on_error(self, mensaje: str):
+        if not self.winfo_exists():
+            return  # el popup se cerró mientras el hilo de fondo todavía descargaba
         self.actualizar_btn.config(state="normal")
         self.cerrar_btn.config(state="normal")
         self.progreso.pack_forget()

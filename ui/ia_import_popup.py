@@ -78,10 +78,14 @@ class IAImportPopup(tk.Toplevel):
             self.after(0, self._pedir_api_key)
             return
         except ia_import.IAImportError as exc:
-            self.after(0, lambda: self._on_error(str(exc)))
+            # Python borra `exc` al salir del except — self.after difiere la lambda, así que
+            # hay que copiar el texto a una variable normal antes o explota con NameError.
+            mensaje = str(exc)
+            self.after(0, lambda: self._on_error(mensaje))
             return
         except Exception as exc:  # noqa: BLE001 - no crashear ante nada inesperado del SDK
-            self.after(0, lambda: self._on_error(f"Error inesperado: {exc}"))
+            mensaje = f"Error inesperado: {exc}"
+            self.after(0, lambda: self._on_error(mensaje))
             return
 
         self.after(0, lambda: self._on_exito(candidatos))

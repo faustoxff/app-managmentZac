@@ -523,10 +523,15 @@ class App(tk.Tk):
         try:
             candidatos = ocr_import.extraer_candidatos(path)
         except ocr_import.TesseractNoDisponible as exc:
-            self.after(0, lambda: self._on_ocr_error("Tesseract no disponible", str(exc)))
+            # Python borra `exc` al salir del except (aunque el return ya se haya ejecutado) —
+            # como self.after difiere la lambda, hay que copiar el texto a una variable normal
+            # antes, si no explota con NameError cuando Tkinter la ejecuta más tarde.
+            mensaje = str(exc)
+            self.after(0, lambda: self._on_ocr_error("Tesseract no disponible", mensaje))
             return
         except Exception as exc:  # noqa: BLE001 - no crashear ante una imagen rara
-            self.after(0, lambda: self._on_ocr_error("Error al procesar la imagen", str(exc)))
+            mensaje = str(exc)
+            self.after(0, lambda: self._on_ocr_error("Error al procesar la imagen", mensaje))
             return
         self.after(0, lambda: self._on_ocr_listo(candidatos, ocr_import.hubo_fallback_idioma()))
 
