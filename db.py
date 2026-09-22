@@ -11,18 +11,32 @@ from models import Cliente, Estado
 
 ESTADOS_SEED = [
     ("Nuevo", "#8b5cf6"),
-    ("Descartado", "#9ca3af"),
-    ("OK", "#22c55e"),
-    ("Cliente", "#3b82f6"),
-    ("Viene", "#eab308"),
-    ("Esperar", "#f97316"),
+    ("Descartado", "#6b7280"),
+    ("OK", "#16a34a"),
+    ("Cliente", "#2563eb"),
+    ("Viene", "#06b6d4"),
+    ("Esperar", "#f59e0b"),
     ("No contesta", "#ef4444"),
 ]
 ESTADOS_SEED_NOMBRES = {nombre for nombre, _ in ESTADOS_SEED}
 
-# Migración one-time del esquema de estados viejo. Cualquier estado que no sea uno de los
-# ESTADOS_SEED de arriba (incluye estados custom que el usuario haya creado/renombrado) migra
-# sus clientes a "Esperar" por defecto, salvo que tenga un mapeo más específico acá.
+# Paleta anterior de ESTADOS_SEED (algunos tonos quedaban muy parecidos entre sí, en especial
+# los cálidos de "Viene"/"Esperar"/"No contesta"). Se usa solo para detectar, en la migración,
+# qué instalaciones todavía tienen el color por defecto viejo sin tocar y así poder
+# actualizarlas al nuevo sin pisar un color que el usuario haya elegido a mano.
+_ESTADOS_SEED_COLOR_VIEJO = {
+    "Nuevo": "#8b5cf6",
+    "Descartado": "#9ca3af",
+    "OK": "#22c55e",
+    "Cliente": "#3b82f6",
+    "Viene": "#eab308",
+    "Esperar": "#f97316",
+    "No contesta": "#ef4444",
+}
+
+# Mapea nombres del esquema VIEJO de estados (5 estados) a su equivalente en el esquema
+# actual. Se usa una sola vez por estado viejo encontrado, en _migrar_estados_a_nuevo_esquema:
+# cualquier estado que el usuario haya creado o renombrado a mano (no está acá) NO se toca.
 MAPEO_ESTADOS_MIGRACION = {
     "Nuevo": "Esperar",
     "Contactado": "Viene",
@@ -105,8 +119,9 @@ def init_db() -> None:
 
 
 def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
-    """Crea los ESTADOS_SEED actuales si faltan, y migra los clientes que apunten a un estado
-    viejo o custom. Es idempotente: en una DB ya migrada no encuentra nada para mover.
+    """Crea los ESTADOS_SEED actuales si faltan, y migra los clientes que estaban en un
+    estado del esquema VIEJO conocido (MAPEO_ESTADOS_MIGRACION). Es idempotente: en una DB ya
+    migrada no encuentra nada para mover.
 
     Va en 2 fases a propósito: el esquema viejo tenía un estado llamado "Nuevo" (con otro
     significado) que se migra a "Esperar" — y el esquema actual TAMBIÉN tiene un "Nuevo".
@@ -115,6 +130,13 @@ def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
     primero se resuelven los nombres que son clave de MAPEO_ESTADOS_MIGRACION (fase 1, mueve
     sus clientes y borra la fila vieja) y recién después se siembran/reordenan los actuales
     (fase 2) — así nunca coexisten un "Nuevo" viejo y uno nuevo al mismo tiempo.
+
+    IMPORTANTE — esto NO toca ningún estado que no sea una key conocida de
+    MAPEO_ESTADOS_MIGRACION: los estados que el usuario cree o renombre a mano desde el botón
+    "Estados" son legítimos y tienen que sobrevivir para siempre a través de reinicios de la
+    app. (Hubo una versión anterior de esta función con una "fase 3" que borraba cualquier
+    estado no incluido en ESTADOS_SEED en CADA arranque — eso rompía cualquier estado custom
+    que el usuario hubiera creado, moviendo sus clientes a "Esperar" sin aviso. Ya no existe.)
     """
     # Fase 1: estados que son clave del mapeo viejo->nuevo, se resuelven primero.
     viejos = conn.execute("SELECT id, nombre FROM estados").fetchall()
@@ -137,25 +159,23 @@ def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
         conn.execute("DELETE FROM estados WHERE id = ?", (id_viejo,))
 
     # Fase 2: asegura que existan (y con el orden correcto) todos los ESTADOS_SEED actuales.
-    existentes = {r["nombre"]: r["id"] for r in conn.execute("SELECT id, nombre FROM estados").fetchall()}
+    existentes_filas = {
+        r["nombre"]: (r["id"], r["color"]) for r in conn.execute("SELECT id, nombre, color FROM estados").fetchall()
+    }
     for orden, (nombre, color) in enumerate(ESTADOS_SEED):
-        if nombre not in existentes:
+        if nombre not in existentes_filas:
             cur = conn.execute(
                 "INSERT INTO estados (nombre, color, orden) VALUES (?, ?, ?)", (nombre, color, orden)
             )
-            existentes[nombre] = cur.lastrowid
+            existentes_filas[nombre] = (cur.lastrowid, color)
         else:
-            conn.execute("UPDATE estados SET orden = ? WHERE id = ?", (orden, existentes[nombre]))
-
-    # Fase 3: lo que sobreviva y no sea uno de los actuales (estado custom del usuario, o algo
-    # viejo sin mapeo específico) migra a "Esperar" por default.
-    id_esperar = existentes["Esperar"]
-    sobrantes = conn.execute("SELECT id, nombre FROM estados").fetchall()
-    for row in sobrantes:
-        if row["nombre"] in ESTADOS_SEED_NOMBRES:
-            continue
-        conn.execute("UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (id_esperar, row["id"]))
-        conn.execute("DELETE FROM estados WHERE id = ?", (row["id"],))
+            id_existente, color_actual = existentes_filas[nombre]
+            conn.execute("UPDATE estados SET orden = ? WHERE id = ?", (orden, id_existente))
+            # Si el color sigue siendo el default viejo (el usuario nunca lo cambió a mano
+            # desde "Estados"), lo actualizamos al nuevo default: algunos tonos cálidos
+            # quedaban casi indistinguibles entre sí en la tabla.
+            if color_actual == _ESTADOS_SEED_COLOR_VIEJO.get(nombre):
+                conn.execute("UPDATE estados SET color = ? WHERE id = ?", (color, id_existente))
 
 
 def _now_iso() -> str:

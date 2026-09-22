@@ -36,7 +36,12 @@ def _conectar(psycopg2):
         raise FaltaConnectionString()
     try:
         return psycopg2.connect(connection_string, connect_timeout=15)
-    except psycopg2.OperationalError as exc:
+    except psycopg2.Error as exc:
+        # Antes solo se capturaba OperationalError (típico de red/host caído) — pero una
+        # cadena de conexión con formato inválido puede hacer que psycopg2 tire otro
+        # subtipo de error (ej. ProgrammingError) que quedaba sin capturar acá y se
+        # colaba sin envolver en BackupError hasta el hilo de la UI, dejando el popup de
+        # backup trabado en "Subiendo..." para siempre sin ningún mensaje de error.
         raise BackupError(
             f"No se pudo conectar a Neon (revisá la cadena de conexión y tu internet):\n{exc}"
         ) from exc

@@ -1,4 +1,5 @@
 import queue
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -37,6 +38,7 @@ class App(tk.Tk):
         self.ocr_popup_activo = None
         self._subida_ip = None
         self._subida_puerto = None
+        self._ocr_en_progreso = False
 
         self._build_menu()
         self._build_toolbar()
@@ -47,7 +49,10 @@ class App(tk.Tk):
 
     def _on_close(self):
         if self.photo_server is not None:
-            self.photo_server.detener()
+            try:
+                self.photo_server.detener()
+            except OSError:
+                pass  # no bloqueamos el cierre de la app por un error al apagar el servidor
         if config.obtener_backup_automatico() and config.obtener_neon_connection_string():
             # Backup sincrónico a propósito acá: la ventana se está por cerrar de todos modos,
             # así que no hace falta un hilo aparte — solo que no bloquee más de unos segundos.
@@ -55,8 +60,8 @@ class App(tk.Tk):
 
             try:
                 backup.hacer_backup_ahora()
-            except backup.BackupError:
-                pass  # no impedimos cerrar la app por esto
+            except Exception:  # noqa: BLE001 - nunca impedimos cerrar la app por esto
+                pass
         self.destroy()
 
     # ---------- construcción de UI ----------
@@ -117,6 +122,9 @@ class App(tk.Tk):
         tk.Entry(busqueda_frame, textvariable=self.busqueda_var, width=30).pack(
             side="left", padx=(6, 0)
         )
+        tk.Button(
+            busqueda_frame, text="✕", command=self._limpiar_busqueda, width=2, fg="gray30"
+        ).pack(side="left", padx=(2, 0))
         tk.Label(
             busqueda_frame, text="(nombre o teléfono — convive con el popup de Filtros)", fg="gray40"
         ).pack(side="left", padx=(8, 0))
@@ -149,8 +157,10 @@ class App(tk.Tk):
         vsb.pack(side="right", fill="y")
 
         self._combo_estado_activo: ttk.Combobox | None = None
+        self._ultima_celda = None  # (fila_iid, col_index) del último clic, para Ctrl+C
         self.tree.bind("<Button-1>", self._click_tabla)
         self.tree.bind("<Double-1>", self._doble_click_tabla)
+        self.tree.bind("<Control-c>", self._copiar_celda)
 
     # ---------- búsqueda rápida ----------
 
@@ -165,6 +175,16 @@ class App(tk.Tk):
     def _aplicar_busqueda_rapida(self):
         self._debounce_id = None
         self.busqueda_rapida = self.busqueda_var.get().strip()
+        self._refrescar()
+
+    def _limpiar_busqueda(self):
+        """La cruz limpia y aplica al toque, sin esperar los 300ms del debounce — al vaciar
+        el campo a mano no hace falta ese margen, el usuario ya terminó de decidir."""
+        if self._debounce_id is not None:
+            self.after_cancel(self._debounce_id)
+            self._debounce_id = None
+        self.busqueda_var.set("")
+        self.busqueda_rapida = ""
         self._refrescar()
 
     # ---------- datos ----------
@@ -210,7 +230,7 @@ class App(tk.Tk):
         if len(hex_color) != 6:
             return "#ffffff"
         r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
-        r, g, b = (int(v + (255 - v) * 0.75) for v in (r, g, b))
+        r, g, b = (int(v + (255 - v) * 0.55) for v in (r, g, b))
         return f"#{r:02x}{g:02x}{b:02x}"
 
     def _actualizar_label_filtros(self):
@@ -248,10 +268,27 @@ class App(tk.Tk):
         if not fila_iid:
             return
         col_index = int(columna.replace("#", "")) - 1
+        self._ultima_celda = (fila_iid, col_index)  # recordado para Ctrl+C
+
         if self.tree["columns"][col_index] != "estado":
             return
 
         self._abrir_editor_estado_inline(fila_iid, columna)
+
+    def _copiar_celda(self, event=None):
+        """Ctrl+C copia al portapapeles el valor de la última celda clickeada (ej. para pegar
+        un teléfono en WhatsApp o el dialer). No hay edición de celda por pegado — para
+        modificar un dato se usa "Editar" (abre el formulario) como ya existía."""
+        if not self._ultima_celda:
+            return
+        fila_iid, col_index = self._ultima_celda
+        if not self.tree.exists(fila_iid):
+            return
+        valores = self.tree.item(fila_iid, "values")
+        if col_index >= len(valores):
+            return
+        self.clipboard_clear()
+        self.clipboard_append(str(valores[col_index]))
 
     def _doble_click_tabla(self, event):
         # Si el doble clic cae sobre la celda de estado, no abrimos el formulario completo:
@@ -456,18 +493,51 @@ class App(tk.Tk):
         self._procesar_foto_ocr(path)
 
     def _procesar_foto_ocr(self, path: str):
-        """Corre el OCR sobre una foto y abre la tabla de revisión. Se usa tanto para el
-        botón manual como para las fotos que llegan por la subida desde el celular."""
+        """Corre el OCR sobre una foto (en un hilo aparte, para no congelar la ventana mientras
+        Tesseract procesa la imagen) y abre la tabla de revisión al terminar. Se usa tanto para
+        el botón manual como para las fotos que llegan por la subida desde el celular."""
+        if self._ocr_en_progreso:
+            # El botón manual no se deshabilita mientras corre el OCR, así que un segundo clic
+            # (o una segunda foto del celular llegando casi al mismo tiempo) podría pisar la
+            # que ya se está procesando. La dejamos afuera con aviso en vez de arrancar dos
+            # OCR en simultáneo.
+            messagebox.showinfo("Procesando", "Ya se está procesando otra foto, esperá a que termine.")
+            return
+        self._ocr_en_progreso = True
+        threading.Thread(target=self._trabajo_ocr, args=(path,), daemon=True).start()
+
+    def _trabajo_ocr(self, path: str):
         import ocr_import
 
         try:
             candidatos = ocr_import.extraer_candidatos(path)
         except ocr_import.TesseractNoDisponible as exc:
-            messagebox.showerror("Tesseract no disponible", str(exc))
+            self.after(0, lambda: self._on_ocr_error("Tesseract no disponible", str(exc)))
             return
         except Exception as exc:  # noqa: BLE001 - no crashear ante una imagen rara
-            messagebox.showerror("Error al procesar la imagen", str(exc))
+            self.after(0, lambda: self._on_ocr_error("Error al procesar la imagen", str(exc)))
             return
+        self.after(0, lambda: self._on_ocr_listo(candidatos, ocr_import.hubo_fallback_idioma()))
+
+    def _on_ocr_error(self, titulo: str, mensaje: str):
+        self._ocr_en_progreso = False
+        if not self.winfo_exists():
+            return  # la ventana se cerró mientras el OCR corría en el hilo de fondo
+        messagebox.showerror(titulo, mensaje)
+
+    def _on_ocr_listo(self, candidatos, hubo_fallback_idioma: bool):
+        self._ocr_en_progreso = False
+        if not self.winfo_exists():
+            return  # la ventana se cerró mientras el OCR corría en el hilo de fondo
+
+        if hubo_fallback_idioma:
+            messagebox.showwarning(
+                "No se pudo usar español",
+                "No se pudo cargar el idioma español para leer la foto y se usó inglés en su "
+                "lugar, así que los resultados van a ser mucho peores de lo normal. Revisá "
+                "los datos con más cuidado antes de confirmar, o probá reinstalar/actualizar "
+                "la app.",
+            )
 
         self.ocr_popup_activo = OcrReviewPopup(
             self,
@@ -551,7 +621,7 @@ class App(tk.Tk):
         self.subida_btn.config(text="Subida por celular")
 
     def _revisar_cola_fotos(self):
-        if self.cola_fotos is not None and self.ocr_popup_activo is None:
+        if self.cola_fotos is not None and self.ocr_popup_activo is None and not self._ocr_en_progreso:
             try:
                 path_foto = self.cola_fotos.get_nowait()
             except queue.Empty:

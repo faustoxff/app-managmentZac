@@ -134,6 +134,11 @@ def _crear_handler(carpeta_destino: Path, cola: "queue.Queue[str]"):
     return Handler
 
 
+class _Servidor(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True  # evita "address already in use" al reactivar rápido en el mismo puerto
+    daemon_threads = True  # así un upload lento/colgado no impide que el proceso termine al cerrar la app
+
+
 class PhotoServer:
     def __init__(self, carpeta_destino: Path, cola: "queue.Queue[str]"):
         self.carpeta_destino = carpeta_destino
@@ -147,7 +152,7 @@ class PhotoServer:
         ultimo_error: OSError | None = None
         for puerto in range(puerto_desde, puerto_desde + intentos):
             try:
-                httpd = socketserver.ThreadingTCPServer(("0.0.0.0", puerto), handler)
+                httpd = _Servidor(("0.0.0.0", puerto), handler)
             except OSError as exc:
                 ultimo_error = exc
                 continue

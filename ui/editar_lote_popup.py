@@ -34,9 +34,32 @@ class EditarLotePopup(tk.Toplevel):
             justify="left",
         ).pack(padx=12, pady=(12, 6), anchor="w")
 
+        cambio_masivo_frame = tk.Frame(self)
+        cambio_masivo_frame.pack(padx=12, pady=(0, 8), anchor="w")
+        tk.Label(cambio_masivo_frame, text="Poner a todos los seleccionados en estado:").pack(
+            side="left"
+        )
+        self.estado_masivo_var = tk.StringVar()
+        ttk.Combobox(
+            cambio_masivo_frame,
+            textvariable=self.estado_masivo_var,
+            values=self.nombres_estados,
+            state="readonly",
+            width=14,
+        ).pack(side="left", padx=6)
+        tk.Button(cambio_masivo_frame, text="Aplicar a todos", command=self._aplicar_estado_masivo).pack(
+            side="left"
+        )
+
         header = tk.Frame(self)
         header.pack(fill="x", padx=12)
-        for texto, ancho in [("Nombre", 24), ("Teléfono", 16), ("Estado", 12), ("Notas", 20)]:
+        for texto, ancho in [
+            ("Nombre", 20),
+            ("Teléfono", 14),
+            ("Estado", 12),
+            ("Notas", 16),
+            ("Recomendado por", 14),
+        ]:
             tk.Label(header, text=texto, width=ancho, anchor="w").pack(side="left", padx=2)
 
         contenedor = tk.Frame(self)
@@ -69,17 +92,20 @@ class EditarLotePopup(tk.Toplevel):
         contacto_var = tk.StringVar(value=cliente.contacto)
         estado_var = tk.StringVar(value=cliente.estado_nombre)
         notas_var = tk.StringVar(value=cliente.notas)
+        recomendado_var = tk.StringVar(value=cliente.recomendado_por)
 
-        e_nombre = tk.Entry(fila_frame, textvariable=nombre_var, width=24)
+        e_nombre = tk.Entry(fila_frame, textvariable=nombre_var, width=20)
         e_nombre.pack(side="left", padx=2)
-        e_contacto = tk.Entry(fila_frame, textvariable=contacto_var, width=16)
+        e_contacto = tk.Entry(fila_frame, textvariable=contacto_var, width=14)
         e_contacto.pack(side="left", padx=2)
         combo_estado = ttk.Combobox(
             fila_frame, textvariable=estado_var, values=self.nombres_estados, state="readonly", width=10
         )
         combo_estado.pack(side="left", padx=2)
-        e_notas = tk.Entry(fila_frame, textvariable=notas_var, width=20)
+        e_notas = tk.Entry(fila_frame, textvariable=notas_var, width=16)
         e_notas.pack(side="left", padx=2)
+        e_recomendado = tk.Entry(fila_frame, textvariable=recomendado_var, width=14)
+        e_recomendado.pack(side="left", padx=2)
 
         aviso_label = tk.Label(fila_frame, text="⚠️ posible duplicado", fg="#92620a")
         forzar_btn = tk.Button(fila_frame, text="Guardar igual", width=12)
@@ -92,7 +118,8 @@ class EditarLotePopup(tk.Toplevel):
             "contacto_var": contacto_var,
             "estado_var": estado_var,
             "notas_var": notas_var,
-            "entries": (e_nombre, e_contacto, e_notas),
+            "recomendado_var": recomendado_var,
+            "entries": (e_nombre, e_contacto, e_notas, e_recomendado),
             "aviso_label": aviso_label,
             "forzar_btn": forzar_btn,
             "guardada": False,
@@ -100,12 +127,22 @@ class EditarLotePopup(tk.Toplevel):
         forzar_btn.config(command=lambda f=fila: self._forzar_fila(f))
         self.filas.append(fila)
 
+    def _aplicar_estado_masivo(self):
+        nuevo_estado = self.estado_masivo_var.get()
+        if not nuevo_estado:
+            messagebox.showinfo("Elegir estado", "Elegí un estado para aplicar.", parent=self)
+            return
+        for fila in self.filas:
+            if not fila["guardada"]:
+                fila["estado_var"].set(nuevo_estado)
+
     def _valores_actuales(self, fila: dict):
         nombre = fila["nombre_var"].get().strip()
         contacto = fila["contacto_var"].get().strip()
         notas = fila["notas_var"].get().strip()
+        recomendado_por = fila["recomendado_var"].get().strip()
         estado_id = next(e.id for e in self.estados if e.nombre == fila["estado_var"].get())
-        return nombre, contacto, notas, estado_id
+        return nombre, contacto, notas, recomendado_por, estado_id
 
     def _cambio_sensible(self, fila: dict, nombre: str, contacto: str) -> bool:
         """Solo chequeamos duplicados si nombre o teléfono realmente cambiaron — no tiene
@@ -113,17 +150,17 @@ class EditarLotePopup(tk.Toplevel):
         cliente = fila["cliente"]
         return nombre != cliente.nombre or contacto != cliente.contacto
 
-    def _guardar_fila(self, fila: dict, nombre, contacto, notas, estado_id):
+    def _guardar_fila(self, fila: dict, nombre, contacto, notas, recomendado_por, estado_id):
         cliente = fila["cliente"]
-        db.actualizar_cliente(cliente.id, nombre, contacto, estado_id, notas, cliente.recomendado_por)
+        db.actualizar_cliente(cliente.id, nombre, contacto, estado_id, notas, recomendado_por)
         fila["guardada"] = True
         self.hubo_cambios = True
         for entry in fila["entries"]:
             entry.config(state="disabled")
 
     def _forzar_fila(self, fila: dict):
-        nombre, contacto, notas, estado_id = self._valores_actuales(fila)
-        self._guardar_fila(fila, nombre, contacto, notas, estado_id)
+        nombre, contacto, notas, recomendado_por, estado_id = self._valores_actuales(fila)
+        self._guardar_fila(fila, nombre, contacto, notas, recomendado_por, estado_id)
         fila["aviso_label"].pack_forget()
         fila["forzar_btn"].pack_forget()
 
@@ -132,7 +169,7 @@ class EditarLotePopup(tk.Toplevel):
         for fila in self.filas:
             if fila["guardada"]:
                 continue
-            nombre, contacto, notas, estado_id = self._valores_actuales(fila)
+            nombre, contacto, notas, recomendado_por, estado_id = self._valores_actuales(fila)
             if not nombre or not contacto:
                 messagebox.showwarning(
                     "Faltan datos", "Nombre y teléfono son obligatorios en todas las filas.", parent=self
@@ -149,7 +186,7 @@ class EditarLotePopup(tk.Toplevel):
                     pendientes += 1
                     continue
 
-            self._guardar_fila(fila, nombre, contacto, notas, estado_id)
+            self._guardar_fila(fila, nombre, contacto, notas, recomendado_por, estado_id)
 
         if pendientes:
             messagebox.showwarning(

@@ -3,6 +3,7 @@ script .bat que hace el reemplazo (en Windows, un .exe no puede sobrescribirse a
 mientras sigue corriendo — por eso el reemplazo lo hace un proceso aparte, después de que la
 app se cierra sola)."""
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -166,4 +167,9 @@ def aplicar_actualizacion(path_exe_nuevo: Path) -> None:
         creationflags=creationflags,
         close_fds=True,
     )
-    sys.exit(0)
+    # Esto se llama desde un hilo de fondo (ver ActualizacionPopup._trabajo_descargar): un
+    # sys.exit() ahí solo terminaría ESE hilo (lanza SystemExit únicamente en el hilo que lo
+    # llama), dejando la ventana de Tkinter abierta y el .exe viejo sin liberar — el .bat de
+    # reemplazo entonces reintenta 20 veces, nunca lo logra, y aborta sin aplicar la
+    # actualización. os._exit() sí mata el proceso entero sin importar desde qué hilo se llame.
+    os._exit(0)

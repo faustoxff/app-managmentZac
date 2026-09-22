@@ -47,6 +47,23 @@ class TesseractNoDisponible(Exception):
     pass
 
 
+_TESSDATA_DIR: str | None = None  # seteado por _configurar_tesseract_embebido si corre empaquetado
+_ultimo_uso_idioma_default = False  # True si la última extracción tuvo que caer a inglés
+
+
+def hubo_fallback_idioma() -> bool:
+    """True si la última llamada a extraer_candidatos() no pudo usar español y cayó al
+    idioma por defecto de Tesseract (inglés) — la UI usa esto para avisar en vez de mostrar
+    resultados malos sin explicación."""
+    return _ultimo_uso_idioma_default
+
+
+def _config_con_tessdata_dir(config: str) -> str:
+    if _TESSDATA_DIR:
+        return f'{config} --tessdata-dir "{_TESSDATA_DIR}"'
+    return config
+
+
 def _configurar_tesseract_embebido(pytesseract) -> None:
     """Cuando la app corre empaquetada (.exe de PyInstaller), el build en GitHub Actions
     empaqueta el propio Tesseract-OCR adentro del ejecutable (ver .github/workflows/build.yml)
@@ -62,7 +79,16 @@ def _configurar_tesseract_embebido(pytesseract) -> None:
     if tesseract_exe.exists():
         pytesseract.pytesseract.tesseract_cmd = str(tesseract_exe)
     if tessdata_dir.exists():
+        # Seteamos la variable de entorno Y guardamos la ruta para pasarla también como
+        # `--tessdata-dir` explícito en cada llamada (ver _config_con_tessdata_dir más abajo):
+        # en la PC de un cliente vimos que "Importar por foto" caía en inglés sin avisar (ver
+        # `_extraer_palabras`), y no pudimos confirmar si TESSDATA_PREFIX se estaba perdiendo
+        # por algo del entorno Windows real (antivirus, permisos, etc). Pasarlo también como
+        # argumento de línea de comandos es un respaldo que no depende de que la variable de
+        # entorno le llegue bien al subproceso.
         os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
+        global _TESSDATA_DIR
+        _TESSDATA_DIR = str(tessdata_dir)
 
 
 def _requerir_pytesseract():
@@ -155,10 +181,13 @@ TESSERACT_CONFIG = "--psm 6"  # asume un único bloque de texto uniforme: mucho 
 
 
 def _extraer_palabras(img: Image.Image) -> list[_Palabra]:
+    global _ultimo_uso_idioma_default
+    _ultimo_uso_idioma_default = False
     pytesseract = _requerir_pytesseract()
+    config = _config_con_tessdata_dir(TESSERACT_CONFIG)
     try:
         data = pytesseract.image_to_data(
-            img, lang="spa", config=TESSERACT_CONFIG, output_type=pytesseract.Output.DICT
+            img, lang="spa", config=config, output_type=pytesseract.Output.DICT
         )
     except pytesseract.TesseractNotFoundError as exc:
         raise TesseractNoDisponible(
@@ -167,9 +196,11 @@ def _extraer_palabras(img: Image.Image) -> list[_Palabra]:
             "Windows) y asegurate de agregarlo al PATH durante la instalación."
         ) from exc
     except Exception:
-        # lang="spa" puede no estar instalado; reintentamos con el idioma por defecto
+        # lang="spa" puede no estar instalado (o no poder cargarse); reintentamos con el
+        # idioma por defecto y dejamos constancia para que la UI pueda avisar.
+        _ultimo_uso_idioma_default = True
         data = pytesseract.image_to_data(
-            img, config=TESSERACT_CONFIG, output_type=pytesseract.Output.DICT
+            img, config=config, output_type=pytesseract.Output.DICT
         )
 
     palabras = []
@@ -262,7 +293,7 @@ def _recortar_y_refinar(img: Image.Image, palabras: list["_Palabra"], whitelist:
     if x1 <= x0 or y1 <= y0:
         return ""
     recorte = img.crop((x0, y0, x1, y1))
-    config = f"--psm 7 -c tessedit_char_whitelist={whitelist}"
+    config = _config_con_tessdata_dir(f"--psm 7 -c tessedit_char_whitelist={whitelist}")
     try:
         return pytesseract.image_to_string(recorte, lang="spa", config=config).strip()
     except Exception:  # noqa: BLE001 - si falla el refinamiento, seguimos con lo que ya había

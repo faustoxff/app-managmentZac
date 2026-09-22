@@ -34,7 +34,8 @@ class ClienteForm(tk.Toplevel):
 
         tk.Label(self, text="Contacto").grid(row=1, column=0, sticky="w", **pad)
         self.contacto_var = tk.StringVar(value=cliente.contacto if cliente else "")
-        tk.Entry(self, textvariable=self.contacto_var, width=40).grid(row=1, column=1, **pad)
+        contacto_entry = tk.Entry(self, textvariable=self.contacto_var, width=40)
+        contacto_entry.grid(row=1, column=1, **pad)
 
         tk.Label(self, text="Estado").grid(row=2, column=0, sticky="w", **pad)
         self.estado_var = tk.StringVar()
@@ -51,7 +52,13 @@ class ClienteForm(tk.Toplevel):
 
         tk.Label(self, text="Recomendado por").grid(row=3, column=0, sticky="w", **pad)
         self.recomendado_var = tk.StringVar(value=cliente.recomendado_por if cliente else "")
-        tk.Entry(self, textvariable=self.recomendado_var, width=40).grid(row=3, column=1, **pad)
+        recomendado_entry = tk.Entry(self, textvariable=self.recomendado_var, width=40)
+        recomendado_entry.grid(row=3, column=1, **pad)
+
+        # Enter guarda directo desde cualquiera de estos campos (no en Notas, ahí Enter tiene
+        # que seguir insertando un salto de línea como siempre).
+        for widget in (self.nombre_entry, contacto_entry, self.estado_combo, recomendado_entry):
+            widget.bind("<Return>", self._enter_guarda)
 
         tk.Label(self, text="Notas").grid(row=4, column=0, sticky="nw", **pad)
         self.notas_text = tk.Text(self, width=40, height=6)
@@ -74,6 +81,10 @@ class ClienteForm(tk.Toplevel):
     def _tab_a_guardar(self, event):
         self.guardar_btn.focus_set()
         return "break"  # evita que el Text inserte una tabulación
+
+    def _enter_guarda(self, event):
+        self._guardar()
+        return "break"
 
     def _forzar_mayusculas(self, *_args):
         """Se ve en mayúscula mientras se escribe, no solo al guardar (db.crear_cliente ya lo
