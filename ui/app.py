@@ -46,6 +46,7 @@ class App(tk.Tk):
         self._refrescar()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.bind_all("<Control-a>", self._atajo_nuevo_cliente)
 
     def _on_close(self):
         if self.photo_server is not None:
@@ -345,6 +346,16 @@ class App(tk.Tk):
 
     def _nuevo_cliente(self):
         ClienteForm(self, on_saved=self._refrescar)
+
+    def _atajo_nuevo_cliente(self, event):
+        # bind_all dispara esto en toda la app, incluidos los Entry/Text de cualquier ventana
+        # (por ejemplo, el buscador o los campos del propio formulario de cliente) — Ctrl+A ahí
+        # ya tiene su uso normal de Tkinter (ir al inicio de la línea), así que no lo pisamos.
+        foco = self.focus_get()
+        if isinstance(foco, (tk.Entry, tk.Text, ttk.Combobox)):
+            return
+        self._nuevo_cliente()
+        return "break"
 
     def _editar_cliente(self):
         cliente_id = self._seleccion_id()

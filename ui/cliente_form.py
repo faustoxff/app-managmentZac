@@ -71,10 +71,14 @@ class ClienteForm(tk.Toplevel):
         self.notas_text.bind("<Tab>", self._tab_a_guardar)
 
         btn_frame = tk.Frame(self)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=(10, 0))
         self.guardar_btn = tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12)
         self.guardar_btn.pack(side="left", padx=5)
-        tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=5)
+        cierra = "Cerrar" if not cliente else "Cancelar"
+        tk.Button(btn_frame, text=cierra, command=self.destroy, width=12).pack(side="left", padx=5)
+
+        self.guardado_label = tk.Label(self, text="", fg="#16a34a")
+        self.guardado_label.grid(row=6, column=0, columnspan=2, pady=(4, 8))
 
         self.nombre_entry.focus_set()
 
@@ -122,11 +126,24 @@ class ClienteForm(tk.Toplevel):
     def _guardar_final(self, nombre, contacto, estado_id, notas, recomendado_por):
         if self.cliente:
             db.actualizar_cliente(self.cliente.id, nombre, contacto, estado_id, notas, recomendado_por)
-        else:
-            db.crear_cliente(nombre, contacto, estado_id, notas, recomendado_por)
+            self.on_saved()
+            self.destroy()
+            return
 
+        db.crear_cliente(nombre, contacto, estado_id, notas, recomendado_por)
         self.on_saved()
-        self.destroy()
+        # A diferencia de editar, acá dejamos la ventana abierta y limpiamos los campos: es
+        # común cargar varios clientes nuevos seguidos (ej. una planilla que se pasa a mano),
+        # y volver a abrir "Nuevo cliente" por cada uno es más lento que solo seguir tipeando.
+        self._limpiar_para_siguiente(nombre)
+
+    def _limpiar_para_siguiente(self, nombre_guardado: str):
+        self.nombre_var.set("")
+        self.contacto_var.set("")
+        self.recomendado_var.set("")
+        self.notas_text.delete("1.0", "end")
+        self.guardado_label.config(text=f"✓ {nombre_guardado} guardado — listo para cargar otro")
+        self.nombre_entry.focus_set()
 
     def _ver_existente(self, cliente_existente: Cliente):
         self.destroy()
