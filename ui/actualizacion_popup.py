@@ -31,8 +31,19 @@ class ActualizacionPopup(tk.Toplevel):
     def _trabajo_buscar(self):
         import updater
 
-        actualizacion = updater.verificar_actualizacion()
+        try:
+            actualizacion = updater.verificar_actualizacion()
+        except updater.NoSePudoComprobar as exc:
+            self.after(0, lambda: self._on_busqueda_fallo(str(exc)))
+            return
         self.after(0, lambda: self._on_busqueda_lista(actualizacion))
+
+    def _on_busqueda_fallo(self, detalle: str):
+        self.estado_label.config(
+            text="No se pudo comprobar si hay una actualización.\n"
+            "Revisá tu conexión a internet e intentá de nuevo más tarde."
+        )
+        tk.Button(self, text="Cerrar", command=self.destroy, width=12).pack(pady=(0, 16))
 
     def _on_busqueda_lista(self, actualizacion):
         if actualizacion is None:

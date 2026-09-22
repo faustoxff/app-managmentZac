@@ -26,6 +26,16 @@ class ActualizacionDisponible:
     tamano: int
 
 
+class NoSePudoComprobar(Exception):
+    """La consulta a GitHub falló (sin internet, GitHub caído, timeout, etc.) — distinto de
+    "ya está al día", que sí es una respuesta válida. Antes ambos casos devolvían None y la UI
+    mostraba "ya tenés la última versión" incluso cuando en realidad no se pudo comprobar
+    nada, lo cual podía ocultarle a un usuario con problemas de conexión que su chequeo nunca
+    llegó a buen puerto."""
+
+    pass
+
+
 def _version_a_tupla(v: str) -> tuple[int, ...]:
     v = (v or "").strip().lstrip("vV")
     partes = []
@@ -38,15 +48,16 @@ def _version_a_tupla(v: str) -> tuple[int, ...]:
 
 
 def verificar_actualizacion() -> ActualizacionDisponible | None:
-    """Devuelve la actualización disponible, o None si ya está al día / no se pudo consultar
-    (sin internet, GitHub caído, el repo no tiene releases todavía, etc.) — nunca lanza, nunca
-    rompe el arranque normal de la app."""
+    """Devuelve la actualización disponible, o None si ya está al día. Lanza
+    NoSePudoComprobar si la consulta en sí falló (sin internet, GitHub caído, el repo no tiene
+    releases todavía, etc.) — nunca deja que un error de red se confunda con "ya estás al
+    día"."""
     try:
         req = urllib.request.Request(API_URL, headers={"Accept": "application/vnd.github+json"})
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
-        return None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as exc:
+        raise NoSePudoComprobar(str(exc)) from exc
 
     tag = data.get("tag_name", "")
     if not tag or _version_a_tupla(tag) <= _version_a_tupla(version.__version__):
