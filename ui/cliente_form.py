@@ -74,6 +74,10 @@ class ClienteForm(tk.Toplevel):
         btn_frame.grid(row=5, column=0, columnspan=2, pady=(10, 0))
         self.guardar_btn = tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12)
         self.guardar_btn.pack(side="left", padx=5)
+        # Los botones de Tkinter solo invocan su comando con la tecla Espacio, no con Enter
+        # (a diferencia de los Entry/Combobox de arriba) — sin este bind, si el foco llega acá
+        # con Tab (ej. desde Notas), apretar Enter no hacía nada.
+        self.guardar_btn.bind("<Return>", self._enter_guarda)
         cierra = "Cerrar" if not cliente else "Cancelar"
         tk.Button(btn_frame, text=cierra, command=self.destroy, width=12).pack(side="left", padx=5)
 

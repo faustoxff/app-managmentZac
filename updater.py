@@ -4,6 +4,7 @@ mientras sigue corriendo — por eso el reemplazo lo hace un proceso aparte, des
 app se cierra sola)."""
 import json
 import os
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -12,11 +13,19 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import certifi
 import version
 
 REPO = "faustoxff/app-managmentZac"
 API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 TIMEOUT = 10
+
+# En vez de confiar en el almacén de certificados del sistema operativo (falla con
+# "CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate" en Windows viejos o sin
+# actualizar, a los que les falta el certificado raíz que usa GitHub) usamos el paquete de
+# certificados que trae certifi, empaquetado dentro del propio .exe — así funciona igual sin
+# importar qué tan actualizado esté el Windows donde corre.
+_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 @dataclass
@@ -54,7 +63,7 @@ def verificar_actualizacion() -> ActualizacionDisponible | None:
     día"."""
     try:
         req = urllib.request.Request(API_URL, headers={"Accept": "application/vnd.github+json"})
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=_SSL_CONTEXT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError) as exc:
         raise NoSePudoComprobar(str(exc)) from exc
@@ -85,7 +94,7 @@ def descargar_actualizacion(url: str, tamano_esperado: int, progreso_callback=No
     destino = carpeta / "GestorClientes_nuevo.exe"
 
     req = urllib.request.Request(url, headers={"Accept": "application/octet-stream"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=30, context=_SSL_CONTEXT) as resp:
         total = int(resp.headers.get("Content-Length") or tamano_esperado or 0)
         descargado = 0
         with open(destino, "wb") as f:
