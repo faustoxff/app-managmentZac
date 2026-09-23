@@ -34,7 +34,9 @@ class FiltrosPopup(tk.Toplevel):
         self.hasta_var = tk.StringVar(value=filtros_actuales.get("fecha_hasta", ""))
         tk.Entry(self, textvariable=self.hasta_var, width=30).grid(row=2, column=1, **pad)
 
-        tk.Label(self, text="Texto (nombre/notas)").grid(row=3, column=0, sticky="w", **pad)
+        tk.Label(self, text="Texto (nombre/notas/recomendado por)").grid(
+            row=3, column=0, sticky="w", **pad
+        )
         self.texto_var = tk.StringVar(value=filtros_actuales.get("texto", ""))
         tk.Entry(self, textvariable=self.texto_var, width=30).grid(row=3, column=1, **pad)
 

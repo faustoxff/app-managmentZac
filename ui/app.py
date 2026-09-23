@@ -47,6 +47,10 @@ class App(tk.Tk):
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind_all("<Control-a>", self._atajo_nuevo_cliente)
+        # Con Bloq Mayús activado, Windows manda el evento como Control-A (mayúscula) en vez
+        # de Control-a — el bind es case-sensitive, así que sin esto el atajo no respondía con
+        # Bloq Mayús puesto (algo común en esta app, que fuerza nombres en mayúscula).
+        self.bind_all("<Control-A>", self._atajo_nuevo_cliente)
 
     def _on_close(self):
         if self.photo_server is not None:
