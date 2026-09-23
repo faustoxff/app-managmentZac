@@ -33,22 +33,31 @@ class ActualizacionPopup(tk.Toplevel):
 
         try:
             actualizacion = updater.verificar_actualizacion()
-        except updater.NoSePudoComprobar:
-            self.after(0, self._on_busqueda_fallo)
+        except updater.NoSePudoComprobar as exc:
+            detalle = str(exc)  # copiado a variable normal: `exc` se borra al salir del
+            # except, y el lambda de abajo corre después, en el hilo de Tkinter.
+            self.after(0, lambda: self._on_busqueda_fallo(detalle))
             return
-        except Exception:  # noqa: BLE001 - cualquier otra falla no debe dejar el popup
-            # trabado para siempre en "Buscando actualizaciones..." sin avisar nada.
-            self.after(0, self._on_busqueda_fallo)
+        except Exception as exc:  # noqa: BLE001 - cualquier otra falla no debe dejar el
+            # popup trabado para siempre en "Buscando actualizaciones..." sin avisar nada.
+            detalle = str(exc)
+            self.after(0, lambda: self._on_busqueda_fallo(detalle))
             return
         self.after(0, lambda: self._on_busqueda_lista(actualizacion))
 
-    def _on_busqueda_fallo(self):
+    def _on_busqueda_fallo(self, detalle: str = ""):
         if not self.winfo_exists():
             return  # el popup se cerró mientras el hilo de fondo todavía buscaba
-        self.estado_label.config(
-            text="No se pudo comprobar si hay una actualización.\n"
+        texto = (
+            "No se pudo comprobar si hay una actualización.\n"
             "Revisá tu conexión a internet e intentá de nuevo más tarde."
         )
+        if detalle:
+            # Detalle técnico del error real (timeout, DNS, certificado SSL, etc.) — antes se
+            # descartaba y este mensaje era siempre igual, sin importar la causa real, lo cual
+            # hacía imposible diagnosticar a distancia qué estaba fallando.
+            texto += f"\n\nDetalle técnico: {detalle}"
+        self.estado_label.config(text=texto)
         tk.Button(self, text="Cerrar", command=self.destroy, width=12).pack(pady=(0, 16))
 
     def _on_busqueda_lista(self, actualizacion):
