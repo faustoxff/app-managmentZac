@@ -37,8 +37,14 @@ _ESTADOS_SEED_COLOR_VIEJO = {
 # Mapea nombres del esquema VIEJO de estados (5 estados) a su equivalente en el esquema
 # actual. Se usa una sola vez por estado viejo encontrado, en _migrar_estados_a_nuevo_esquema:
 # cualquier estado que el usuario haya creado o renombrado a mano (no está acá) NO se toca.
+#
+# OJO: "Nuevo" NO va acá. El esquema viejo tenía un "Nuevo" con otro significado, pero el
+# esquema actual TAMBIÉN tiene un estado llamado "Nuevo" (ESTADOS_SEED, el default para
+# clientes importados). Si "Nuevo" estuviera en este mapeo, la migración de la fase 1 no
+# puede distinguir el "Nuevo" viejo del "Nuevo" actual: en cada arranque encontraría la fila
+# "Nuevo" legítima, movería a esos clientes a "Esperar" y borraría la fila. Eso es lo que
+# causaba que los clientes en "Nuevo" quedaran reseteados a "Esperar" en cada reinicio.
 MAPEO_ESTADOS_MIGRACION = {
-    "Nuevo": "Esperar",
     "Contactado": "Viene",
     "En negociación": "Esperar",
     "Cerrado": "Cliente",
@@ -123,13 +129,14 @@ def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
     estado del esquema VIEJO conocido (MAPEO_ESTADOS_MIGRACION). Es idempotente: en una DB ya
     migrada no encuentra nada para mover.
 
-    Va en 2 fases a propósito: el esquema viejo tenía un estado llamado "Nuevo" (con otro
-    significado) que se migra a "Esperar" — y el esquema actual TAMBIÉN tiene un "Nuevo".
-    Si sembráramos los ESTADOS_SEED actuales primero, un "Nuevo" viejo sin migrar todavía se
-    confundiría con el "Nuevo" nuevo (mismo nombre, fila con historial distinto). Por eso acá
-    primero se resuelven los nombres que son clave de MAPEO_ESTADOS_MIGRACION (fase 1, mueve
-    sus clientes y borra la fila vieja) y recién después se siembran/reordenan los actuales
-    (fase 2) — así nunca coexisten un "Nuevo" viejo y uno nuevo al mismo tiempo.
+    Va en 2 fases: primero se resuelven los nombres que son clave de MAPEO_ESTADOS_MIGRACION
+    (fase 1, mueve sus clientes y borra la fila vieja) y recién después se siembran/reordenan
+    los ESTADOS_SEED actuales (fase 2). IMPORTANTE: MAPEO_ESTADOS_MIGRACION nunca puede tener
+    como clave el nombre de un estado que también exista en ESTADOS_SEED (como pasaba antes
+    con "Nuevo") — si lo tuviera, la fase 1 no podría distinguir la fila legítima y actual de
+    ese nombre de una fila vieja pendiente de migrar, y en cada arranque movería de nuevo a
+    esos clientes y borraría la fila (para recrearla vacía en la fase 2). Ver el comentario
+    junto a MAPEO_ESTADOS_MIGRACION.
 
     IMPORTANTE — esto NO toca ningún estado que no sea una key conocida de
     MAPEO_ESTADOS_MIGRACION: los estados que el usuario cree o renombre a mano desde el botón
