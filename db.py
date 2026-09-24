@@ -80,8 +80,47 @@ def get_conn():
         conn.close()
 
 
+MAX_COPIAS_ARRANQUE = 5
+
+
+def _copia_de_seguridad_al_arrancar() -> None:
+    """Copia clientes.db a la carpeta backups_locales/ ANTES de tocar nada en cada arranque
+    (migraciones incluidas), y conserva solo las últimas MAX_COPIAS_ARRANQUE. Si alguna vez
+    algo mueve o borra datos, siempre queda un punto de restauración de justo antes.
+    Best-effort: nunca debe impedir que la app arranque."""
+    try:
+        if not DB_PATH.exists() or DB_PATH.stat().st_size == 0:
+            return
+        carpeta = get_data_dir() / "backups_locales"
+        carpeta.mkdir(exist_ok=True)
+        marca = datetime.now().strftime("%Y%m%d_%H%M%S")
+        destino = carpeta / f"clientes_{marca}_v{version.__version__}.db"
+        origen = sqlite3.connect(DB_PATH)
+        try:
+            copia = sqlite3.connect(destino)
+            try:
+                origen.backup(copia)
+            finally:
+                copia.close()
+        finally:
+            origen.close()
+        for vieja in sorted(carpeta.glob("clientes_*.db"))[:-MAX_COPIAS_ARRANQUE]:
+            vieja.unlink(missing_ok=True)
+    except (OSError, sqlite3.Error):
+        pass
+
+
+def _log_conteo_por_estado(conn: sqlite3.Connection, momento: str) -> None:
+    filas = conn.execute(
+        "SELECT e.nombre AS nombre, COUNT(c.id) AS n FROM estados e "
+        "LEFT JOIN clientes c ON c.estado_id = e.id GROUP BY e.id ORDER BY e.orden"
+    ).fetchall()
+    _log_diagnostico(f"clientes por estado {momento}: " + ", ".join(f"{f['nombre']}={f['n']}" for f in filas))
+
+
 def init_db() -> None:
     _log_diagnostico("arranque de la app (init_db)")
+    _copia_de_seguridad_al_arrancar()
     with get_conn() as conn:
         conn.execute(
             """
@@ -138,7 +177,9 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_clientes_contacto_norm ON clientes(contacto_normalizado)"
         )
 
+        _log_conteo_por_estado(conn, "antes de migrar")
         _migrar_estados_a_nuevo_esquema(conn)
+        _log_conteo_por_estado(conn, "despues de migrar")
 
 
 def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
