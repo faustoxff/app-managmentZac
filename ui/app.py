@@ -1,6 +1,7 @@
 import queue
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import config
@@ -517,12 +518,17 @@ class App(tk.Tk):
         """Corre el OCR sobre una foto (en un hilo aparte, para no congelar la ventana mientras
         Tesseract procesa la imagen) y abre la tabla de revisión al terminar. Se usa tanto para
         el botón manual como para las fotos que llegan por la subida desde el celular."""
-        if self._ocr_en_progreso:
+        if self._ocr_en_progreso or self.ocr_popup_activo is not None:
             # El botón manual no se deshabilita mientras corre el OCR, así que un segundo clic
             # (o una segunda foto del celular llegando casi al mismo tiempo) podría pisar la
-            # que ya se está procesando. La dejamos afuera con aviso en vez de arrancar dos
-            # OCR en simultáneo.
-            messagebox.showinfo("Procesando", "Ya se está procesando otra foto, esperá a que termine.")
+            # que ya se está procesando. También cubrimos el caso de que ya haya una tabla de
+            # revisión abierta sin confirmar: antes solo se chequeaba _ocr_en_progreso, así que
+            # el botón manual podía abrir una SEGUNDA revisión mientras la primera seguía sin
+            # cerrar, pisando la referencia en self.ocr_popup_activo (la cola de fotos del
+            # celular, más abajo, ya hacía bien este chequeo).
+            messagebox.showinfo(
+                "Procesando", "Ya hay una foto en proceso o pendiente de revisión, esperá a que termine."
+            )
             return
         self._ocr_en_progreso = True
         threading.Thread(target=self._trabajo_ocr, args=(path,), daemon=True).start()
@@ -531,19 +537,49 @@ class App(tk.Tk):
         import ocr_import
 
         try:
-            candidatos = ocr_import.extraer_candidatos(path)
-        except ocr_import.TesseractNoDisponible as exc:
-            # Python borra `exc` al salir del except (aunque el return ya se haya ejecutado) —
-            # como self.after difiere la lambda, hay que copiar el texto a una variable normal
-            # antes, si no explota con NameError cuando Tkinter la ejecuta más tarde.
-            mensaje = str(exc)
-            self.after(0, lambda: self._on_ocr_error("Tesseract no disponible", mensaje))
-            return
-        except Exception as exc:  # noqa: BLE001 - no crashear ante una imagen rara
-            mensaje = str(exc)
-            self.after(0, lambda: self._on_ocr_error("Error al procesar la imagen", mensaje))
-            return
-        self.after(0, lambda: self._on_ocr_listo(candidatos, ocr_import.hubo_fallback_idioma()))
+            try:
+                candidatos = ocr_import.extraer_candidatos(path)
+            except ocr_import.TesseractNoDisponible as exc:
+                # Python borra `exc` al salir del except (aunque el return ya se haya
+                # ejecutado) — como self.after difiere la lambda, hay que copiar el texto a
+                # una variable normal antes, si no explota con NameError cuando Tkinter la
+                # ejecuta más tarde.
+                mensaje = str(exc)
+                self._agendar_en_ui(lambda: self._on_ocr_error("Tesseract no disponible", mensaje))
+                return
+            except Exception as exc:  # noqa: BLE001 - no crashear ante una imagen rara
+                mensaje = str(exc)
+                self._agendar_en_ui(lambda: self._on_ocr_error("Error al procesar la imagen", mensaje))
+                return
+            self._agendar_en_ui(
+                lambda: self._on_ocr_listo(candidatos, ocr_import.hubo_fallback_idioma())
+            )
+        finally:
+            self._borrar_si_es_foto_pendiente(path)
+
+    def _agendar_en_ui(self, callback):
+        """self.after(0, callback), pero sin reventar si la ventana ya se cerró mientras el
+        OCR corría en el hilo de fondo (ej. Tesseract tarda unos segundos en una foto grande y
+        el usuario cierra la app antes de que termine) — self.after() en una ventana ya
+        destruida lanza desde este hilo daemon, sin ningún try/except arriba que lo atrape."""
+        try:
+            self.after(0, callback)
+        except (RuntimeError, tk.TclError):
+            pass
+
+    def _borrar_si_es_foto_pendiente(self, path: str):
+        """Las fotos que llegan por "Subida por celular" quedan en una carpeta interna de la
+        app (config.carpeta_fotos_pendientes()) solo como paso intermedio hasta que el OCR las
+        procesa — una vez procesadas ya no hacen falta, y sin borrarlas se acumulan ahí para
+        siempre. NO tocamos fotos elegidas a mano con "Importar por foto" (vienen de un
+        filedialog): esas son archivos del usuario en su propia carpeta, no nuestros para
+        borrar."""
+        try:
+            p = Path(path)
+            if p.parent == config.carpeta_fotos_pendientes():
+                p.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def _on_ocr_error(self, titulo: str, mensaje: str):
         self._ocr_en_progreso = False

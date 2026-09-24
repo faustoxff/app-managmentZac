@@ -13,6 +13,7 @@ import socket
 import socketserver
 import threading
 import time
+import uuid
 from pathlib import Path
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # una foto de celular normal entra cómoda en 25MB
@@ -122,7 +123,11 @@ def _crear_handler(carpeta_destino: Path, cola: "queue.Queue[str]"):
             ext = Path(filename or "").suffix.lower()
             if ext not in EXTENSIONES_VALIDAS:
                 ext = ".jpg"
-            destino = carpeta_destino / f"foto_{int(time.time() * 1000)}{ext}"
+            # ThreadingTCPServer atiende cada request en su propio hilo: dos subidas casi
+            # simultáneas (doble tap, reintento por wifi lenta) podían caer en el mismo
+            # milisegundo y pisarse el archivo una a la otra. Se agrega un sufijo random corto
+            # además del timestamp para que dos nombres nunca choquen.
+            destino = carpeta_destino / f"foto_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}{ext}"
             destino.write_bytes(contenido)
             cola.put(str(destino))
 

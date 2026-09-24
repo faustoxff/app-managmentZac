@@ -355,7 +355,9 @@ def extraer_candidatos(path: str) -> list[FilaImport]:
             cursor += len(p.texto) + 1  # +1 por el espacio separador
             if inicio < m_nombre.end() and cursor - 1 > m_nombre.start():
                 palabras_nombre.append(p)
-                x_fin_nombre = p.left
+                x_fin_nombre = p.right  # borde derecho de la última palabra del nombre, no
+                # el izquierdo — si no, la distancia de desempate queda corrida hacia la
+                # izquierda por el ancho de esa palabra.
 
         mejor_telefono = None
         mejor_distancia = None
@@ -364,6 +366,20 @@ def extraer_candidatos(path: str) -> list[FilaImport]:
             j = i + offset
             if j >= len(lineas):
                 break
+            if offset > 0:
+                texto_linea_j = " ".join(p.texto for p in lineas[j])
+                ya_es_otro_paciente = any(
+                    m.group(0).split()[0] not in PALABRAS_NO_NOMBRE
+                    for m in RE_NOMBRE.finditer(texto_linea_j)
+                )
+                if ya_es_otro_paciente:
+                    # Esta línea ya es la fila de OTRO paciente (tiene su propio nombre) —
+                    # cortamos acá para no robarle su teléfono al de más arriba. Sin este
+                    # corte, un nombre sin teléfono en su propia línea (por blur/skew) podía
+                    # terminar con el teléfono del paciente de 1-2 líneas más abajo, sin
+                    # ningún aviso en la revisión (Tesseract lo lee bien, solo que es de otra
+                    # persona).
+                    break
             for limpio, x_izq, tramo in _candidatos_telefono_en_linea(lineas[j]):
                 dist_x = abs(x_izq - x_fin_nombre)
                 # Preferimos el candidato más largo ANTES que el más cercano: en estas

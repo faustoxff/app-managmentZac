@@ -71,7 +71,10 @@ class OcrReviewPopup(tk.Toplevel):
 
     @staticmethod
     def _es_dudosa(confianza) -> bool:
-        return confianza is not None and 0 <= confianza < UMBRAL_CONFIANZA_AVISO
+        # confianza == -1 significa "no se encontró nada para medir" (ej. no se detectó
+        # ningún teléfono en la línea) — es justamente el caso que más necesita revisión, no
+        # uno a excluir. None sigue significando "no aplica" (filas de Excel/IA).
+        return confianza is not None and confianza < UMBRAL_CONFIANZA_AVISO
 
     def _agregar_fila(
         self,
