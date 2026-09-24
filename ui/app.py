@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import config
 import db
+import version
 from fechas import formatear_fecha
 from ui.actualizacion_popup import ActualizacionPopup
 from ui.api_key_popup import ApiKeyPopup
@@ -24,7 +25,12 @@ from ui.subida_celular_popup import SubidaCelularPopup
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Gestor de Clientes")
+        # Visible siempre, sin depender de internet ni de entrar a ningún menú — antes la
+        # única forma de saber qué versión tenía instalada una PC era abrir "Buscar
+        # actualización" (que además necesita conexión), lo que hacía imposible confirmar a
+        # distancia si un usuario estaba realmente corriendo la versión nueva después de una
+        # actualización o instalación manual.
+        self.title(f"Gestor de Clientes — v{version.__version__}")
         self.geometry("980x560")
         self.minsize(760, 420)
 
