@@ -18,6 +18,7 @@ from ui.filtros import FiltrosPopup
 from ui.ia_import_popup import IAImportPopup
 from ui.mapeo_excel_popup import MapeoColumnasPopup
 from ui.ocr_review_popup import OcrReviewPopup
+from ui.restaurar_backup_local_popup import RestaurarBackupLocalPopup
 from ui.resumen_import_popup import ResumenImportPopup
 from ui.subida_celular_popup import SubidaCelularPopup
 
@@ -83,6 +84,9 @@ class App(tk.Tk):
         config_menu = tk.Menu(menubar, tearoff=0)
         config_menu.add_command(label="Configurar IA", command=self._cambiar_api_key)
         config_menu.add_command(label="Backup en la nube (Neon)", command=self._abrir_backup)
+        config_menu.add_command(
+            label="Restaurar backup local (deshacer)", command=self._abrir_restaurar_local
+        )
         menubar.add_cascade(label="Configuración", menu=config_menu)
 
         ayuda_menu = tk.Menu(menubar, tearoff=0)
@@ -94,6 +98,16 @@ class App(tk.Tk):
 
     def _abrir_backup(self):
         BackupPopup(self)
+
+    def _abrir_restaurar_local(self):
+        RestaurarBackupLocalPopup(self, on_restaurado=self._on_restaurado_local)
+
+    def _on_restaurado_local(self):
+        # Después de pisar clientes.db con un backup local, re-corremos init_db() para que
+        # cualquier chequeo de esquema/migración quede consistente contra la versión de la
+        # app que está corriendo ahora, igual que en un arranque normal.
+        db.init_db()
+        self._refrescar()
 
     def _ver_log_diagnostico(self):
         # Para poder pedirle este archivo a un usuario sin que tenga que navegar carpetas

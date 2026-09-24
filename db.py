@@ -1,4 +1,5 @@
 """Acceso a SQLite. Cada operación abre y cierra su propia conexión (context manager)."""
+import shutil
 import sqlite3
 import unicodedata
 from contextlib import contextmanager
@@ -11,6 +12,9 @@ from config import DB_PATH, get_data_dir
 from models import Cliente, Estado
 
 LOG_PATH = get_data_dir() / "diagnostico.log"
+BACKUPS_LOCALES_DIR = get_data_dir() / "backups_locales"
+MAX_BACKUPS_LOCALES = 15  # ~15 arranques de historial — para 200 clientes cada copia pesa muy
+# poco, no vale la pena guardar menos por miedo al espacio.
 
 
 def _log_diagnostico(mensaje: str) -> None:
@@ -24,6 +28,54 @@ def _log_diagnostico(mensaje: str) -> None:
             f.write(f"{datetime.now().isoformat(timespec='seconds')} v{version.__version__} {mensaje}\n")
     except OSError:
         pass
+
+
+def _snapshot_local() -> None:
+    """Copia de seguridad automática y LOCAL del archivo de la DB, tomada en cada arranque
+    ANTES de tocar nada (schema, migración, lo que sea). No depende de internet ni de Neon.
+
+    Es la red de seguridad real ante cualquier cambio masivo inesperado en los datos — una
+    migración con un bug, algo que no contemplamos, lo que sea: en vez de tener que cargar a
+    mano de nuevo centenares de clientes, alcanza con restaurar el backup de un arranque
+    anterior (ver restaurar_backup_local). Se guardan las últimas MAX_BACKUPS_LOCALES copias y
+    se borran las más viejas. Best-effort: nunca debe impedir que la app arranque."""
+    try:
+        if not DB_PATH.exists():
+            return  # primera vez que se usa la app, todavía no hay nada que respaldar
+        BACKUPS_LOCALES_DIR.mkdir(parents=True, exist_ok=True)
+        destino = BACKUPS_LOCALES_DIR / f"clientes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        if not destino.exists():
+            shutil.copy2(DB_PATH, destino)
+
+        backups = sorted(BACKUPS_LOCALES_DIR.glob("clientes_*.db"), reverse=True)
+        for viejo in backups[MAX_BACKUPS_LOCALES:]:
+            viejo.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def listar_backups_locales() -> list[tuple[str, str]]:
+    """Devuelve [(nombre_archivo, fecha_legible), ...] del más nuevo al más viejo."""
+    if not BACKUPS_LOCALES_DIR.exists():
+        return []
+    resultado = []
+    for b in sorted(BACKUPS_LOCALES_DIR.glob("clientes_*.db"), reverse=True):
+        try:
+            fecha = datetime.strptime(b.stem, "clientes_%Y%m%d_%H%M%S")
+        except ValueError:
+            continue
+        resultado.append((b.name, fecha.strftime("%d/%m/%Y %H:%M:%S")))
+    return resultado
+
+
+def restaurar_backup_local(nombre_archivo: str) -> None:
+    """Sobreescribe la DB local con una de las copias automáticas locales. Destructivo — la UI
+    tiene que confirmar antes de llamar a esto."""
+    origen = BACKUPS_LOCALES_DIR / nombre_archivo
+    if not origen.exists() or origen.parent != BACKUPS_LOCALES_DIR:
+        raise OSError(f"No se encontró el backup local '{nombre_archivo}'.")
+    shutil.copy2(origen, DB_PATH)
+    _log_diagnostico(f"RESTAURACIÓN DESDE BACKUP LOCAL: se sobreescribió la DB local con '{nombre_archivo}'")
 
 ESTADOS_SEED = [
     ("Nuevo", "#8b5cf6"),
@@ -82,6 +134,7 @@ def get_conn():
 
 def init_db() -> None:
     _log_diagnostico("arranque de la app (init_db)")
+    _snapshot_local()
     with get_conn() as conn:
         conn.execute(
             """
