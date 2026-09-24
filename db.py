@@ -177,6 +177,8 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_clientes_contacto_norm ON clientes(contacto_normalizado)"
         )
 
+        integridad = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        _log_diagnostico(f"integridad de la base: {integridad}")
         _log_conteo_por_estado(conn, "antes de migrar")
         _migrar_estados_a_nuevo_esquema(conn)
         _log_conteo_por_estado(conn, "despues de migrar")
