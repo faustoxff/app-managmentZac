@@ -13,8 +13,8 @@ from models import Cliente, Estado
 
 LOG_PATH = get_data_dir() / "diagnostico.log"
 BACKUPS_LOCALES_DIR = get_data_dir() / "backups_locales"
-MAX_BACKUPS_LOCALES = 15  # ~15 arranques de historial — para 200 clientes cada copia pesa muy
-# poco, no vale la pena guardar menos por miedo al espacio.
+MAX_COPIAS_ARRANQUE = 15  # ~15 arranques de historial — para unos cientos de clientes cada
+# copia pesa muy poco, no vale la pena guardar menos por miedo al espacio.
 
 
 def _log_diagnostico(mensaje: str) -> None:
@@ -30,38 +30,18 @@ def _log_diagnostico(mensaje: str) -> None:
         pass
 
 
-def _snapshot_local() -> None:
-    """Copia de seguridad automática y LOCAL del archivo de la DB, tomada en cada arranque
-    ANTES de tocar nada (schema, migración, lo que sea). No depende de internet ni de Neon.
-
-    Es la red de seguridad real ante cualquier cambio masivo inesperado en los datos — una
-    migración con un bug, algo que no contemplamos, lo que sea: en vez de tener que cargar a
-    mano de nuevo centenares de clientes, alcanza con restaurar el backup de un arranque
-    anterior (ver restaurar_backup_local). Se guardan las últimas MAX_BACKUPS_LOCALES copias y
-    se borran las más viejas. Best-effort: nunca debe impedir que la app arranque."""
-    try:
-        if not DB_PATH.exists():
-            return  # primera vez que se usa la app, todavía no hay nada que respaldar
-        BACKUPS_LOCALES_DIR.mkdir(parents=True, exist_ok=True)
-        destino = BACKUPS_LOCALES_DIR / f"clientes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-        if not destino.exists():
-            shutil.copy2(DB_PATH, destino)
-
-        backups = sorted(BACKUPS_LOCALES_DIR.glob("clientes_*.db"), reverse=True)
-        for viejo in backups[MAX_BACKUPS_LOCALES:]:
-            viejo.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
 def listar_backups_locales() -> list[tuple[str, str]]:
-    """Devuelve [(nombre_archivo, fecha_legible), ...] del más nuevo al más viejo."""
+    """Devuelve [(nombre_archivo, fecha_legible), ...] del más nuevo al más viejo, leyendo las
+    copias que arma _copia_de_seguridad_al_arrancar() (formato clientes_AAAAMMDD_HHMMSS_vX.Y.Z.db)."""
     if not BACKUPS_LOCALES_DIR.exists():
         return []
     resultado = []
     for b in sorted(BACKUPS_LOCALES_DIR.glob("clientes_*.db"), reverse=True):
+        partes = b.stem.split("_")  # ["clientes", "AAAAMMDD", "HHMMSS", "vX.Y.Z"]
+        if len(partes) < 3:
+            continue
         try:
-            fecha = datetime.strptime(b.stem, "clientes_%Y%m%d_%H%M%S")
+            fecha = datetime.strptime(f"{partes[1]}_{partes[2]}", "%Y%m%d_%H%M%S")
         except ValueError:
             continue
         resultado.append((b.name, fecha.strftime("%d/%m/%Y %H:%M:%S")))
@@ -76,6 +56,7 @@ def restaurar_backup_local(nombre_archivo: str) -> None:
         raise OSError(f"No se encontró el backup local '{nombre_archivo}'.")
     shutil.copy2(origen, DB_PATH)
     _log_diagnostico(f"RESTAURACIÓN DESDE BACKUP LOCAL: se sobreescribió la DB local con '{nombre_archivo}'")
+
 
 ESTADOS_SEED = [
     ("Nuevo", "#8b5cf6"),
@@ -132,9 +113,45 @@ def get_conn():
         conn.close()
 
 
+def _copia_de_seguridad_al_arrancar() -> None:
+    """Copia clientes.db a BACKUPS_LOCALES_DIR ANTES de tocar nada en cada arranque
+    (migraciones incluidas), usando el backup nativo de sqlite3 (más seguro que copiar el
+    archivo crudo: funciona bien aunque la conexión tenga cambios sin commitear o el archivo
+    esté en modo WAL). Conserva solo las últimas MAX_COPIAS_ARRANQUE. Si alguna vez algo mueve
+    o borra datos, siempre queda un punto de restauración de justo antes. Best-effort: nunca
+    debe impedir que la app arranque."""
+    try:
+        if not DB_PATH.exists() or DB_PATH.stat().st_size == 0:
+            return
+        BACKUPS_LOCALES_DIR.mkdir(parents=True, exist_ok=True)
+        marca = datetime.now().strftime("%Y%m%d_%H%M%S")
+        destino = BACKUPS_LOCALES_DIR / f"clientes_{marca}_v{version.__version__}.db"
+        origen = sqlite3.connect(DB_PATH)
+        try:
+            copia = sqlite3.connect(destino)
+            try:
+                origen.backup(copia)
+            finally:
+                copia.close()
+        finally:
+            origen.close()
+        for vieja in sorted(BACKUPS_LOCALES_DIR.glob("clientes_*.db"))[:-MAX_COPIAS_ARRANQUE]:
+            vieja.unlink(missing_ok=True)
+    except (OSError, sqlite3.Error):
+        pass
+
+
+def _log_conteo_por_estado(conn: sqlite3.Connection, momento: str) -> None:
+    filas = conn.execute(
+        "SELECT e.nombre AS nombre, COUNT(c.id) AS n FROM estados e "
+        "LEFT JOIN clientes c ON c.estado_id = e.id GROUP BY e.id ORDER BY e.orden"
+    ).fetchall()
+    _log_diagnostico(f"clientes por estado {momento}: " + ", ".join(f"{f['nombre']}={f['n']}" for f in filas))
+
+
 def init_db() -> None:
     _log_diagnostico("arranque de la app (init_db)")
-    _snapshot_local()
+    _copia_de_seguridad_al_arrancar()
     with get_conn() as conn:
         conn.execute(
             """
@@ -191,7 +208,11 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_clientes_contacto_norm ON clientes(contacto_normalizado)"
         )
 
+        integridad = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        _log_diagnostico(f"integridad de la base: {integridad}")
+        _log_conteo_por_estado(conn, "antes de migrar")
         _migrar_estados_a_nuevo_esquema(conn)
+        _log_conteo_por_estado(conn, "despues de migrar")
 
 
 def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
