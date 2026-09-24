@@ -358,6 +358,12 @@ class App(tk.Tk):
         foco = self.focus_get()
         if isinstance(foco, (tk.Entry, tk.Text, ttk.Combobox)):
             return
+        # bind_all también dispara con el foco en cualquier popup modal abierto (Estados,
+        # Backup, Filtros, etc.) si el widget enfocado ahí no es un Entry/Text/Combobox (ej.
+        # una Treeview o un Button) — sin este chequeo, se abría "Nuevo cliente" encima del
+        # popup y le robaba el grab modal, dejándolo roto al cerrar el nuevo formulario.
+        if foco is not None and foco.winfo_toplevel() is not self:
+            return
         self._nuevo_cliente()
         return "break"
 

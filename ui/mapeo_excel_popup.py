@@ -8,6 +8,7 @@ CAMPOS = [
     ("contacto", "Contacto / Teléfono *", True),
     ("estado", "Estado", False),
     ("notas", "Notas", False),
+    ("recomendado_por", "Recomendado por", False),
 ]
 
 

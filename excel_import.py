@@ -138,7 +138,9 @@ def exportar_excel(path: str, clientes) -> None:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Clientes"
-    ws.append(["Nombre", "Teléfono", "Estado", "Fecha de alta", "Fecha de actualización", "Notas"])
+    ws.append(
+        ["Nombre", "Teléfono", "Estado", "Fecha de alta", "Fecha de actualización", "Notas", "Recomendado por"]
+    )
     for c in clientes:
         ws.append(
             [
@@ -148,6 +150,7 @@ def exportar_excel(path: str, clientes) -> None:
                 formatear_fecha(c.fecha_alta),
                 formatear_fecha(c.fecha_actualizacion),
                 c.notas,
+                c.recomendado_por,
             ]
         )
     wb.save(path)
