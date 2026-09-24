@@ -87,12 +87,34 @@ class App(tk.Tk):
 
         ayuda_menu = tk.Menu(menubar, tearoff=0)
         ayuda_menu.add_command(label="Buscar actualización", command=self._buscar_actualizacion)
+        ayuda_menu.add_command(label="Ver log de diagnóstico", command=self._ver_log_diagnostico)
         menubar.add_cascade(label="Ayuda", menu=ayuda_menu)
 
         self.config(menu=menubar)
 
     def _abrir_backup(self):
         BackupPopup(self)
+
+    def _ver_log_diagnostico(self):
+        # Para poder pedirle este archivo a un usuario sin que tenga que navegar carpetas
+        # ocultas de Windows (%APPDATA% no se ve por default en el Explorador) — un clic desde
+        # acá alcanza para mandarlo por WhatsApp/mail.
+        if not db.LOG_PATH.exists():
+            messagebox.showinfo(
+                "Sin log todavía", "Todavía no se generó ningún log de diagnóstico."
+            )
+            return
+        import os
+
+        if not hasattr(os, "startfile"):
+            # os.startfile solo existe en Windows — en desarrollo sobre Linux/Mac mostramos
+            # la ruta en vez de fallar.
+            messagebox.showinfo("Log de diagnóstico", f"Archivo en:\n{db.LOG_PATH}")
+            return
+        try:
+            os.startfile(db.LOG_PATH)  # abre con el editor de texto default de Windows
+        except OSError as exc:
+            messagebox.showerror("No se pudo abrir", f"No se pudo abrir el archivo:\n{exc}")
 
     def _cambiar_api_key(self):
         ApiKeyPopup(self)

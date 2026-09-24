@@ -129,6 +129,13 @@ def restaurar_backup(nombre_archivo: str) -> None:
         if not fila:
             raise BackupError(f"No se encontró el backup '{nombre_archivo}' en Neon.")
         config.DB_PATH.write_bytes(bytes(fila[0]))
+        # Este es el único lugar de todo el código que sobreescribe la DB local desde Neon —
+        # se deja registro acá para poder confirmar o descartar con evidencia real si algún
+        # reseteo de datos vino de acá (solo pasa si alguien confirmó a mano el popup de
+        # "Restaurar backup", nunca automático).
+        import db
+
+        db._log_diagnostico(f"RESTAURACIÓN DESDE NEON: se sobreescribió la DB local con '{nombre_archivo}'")
     except (FaltaConnectionString, BackupError):
         raise
     except Exception as exc:  # noqa: BLE001

@@ -6,8 +6,24 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Iterable, Optional
 
-from config import DB_PATH
+import version
+from config import DB_PATH, get_data_dir
 from models import Cliente, Estado
+
+LOG_PATH = get_data_dir() / "diagnostico.log"
+
+
+def _log_diagnostico(mensaje: str) -> None:
+    """Best-effort: nunca debe romper nada si falla escribir esto. Sirve para poder
+    diagnosticar a distancia problemas como el reseteo de estados con evidencia real de la PC
+    del usuario en vez de tener que reproducirlos en vivo — se le puede pedir este archivo
+    (queda en la misma carpeta que la base de datos) sin que haga falta nada técnico de su
+    parte."""
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat(timespec='seconds')} v{version.__version__} {mensaje}\n")
+    except OSError:
+        pass
 
 ESTADOS_SEED = [
     ("Nuevo", "#8b5cf6"),
@@ -65,6 +81,7 @@ def get_conn():
 
 
 def init_db() -> None:
+    _log_diagnostico("arranque de la app (init_db)")
     with get_conn() as conn:
         conn.execute(
             """
@@ -162,7 +179,15 @@ def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
             id_nuevo = conn.execute(
                 "INSERT INTO estados (nombre, color, orden) VALUES (?, ?, 999)", (nombre_nuevo, color)
             ).lastrowid
-        conn.execute("UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (id_nuevo, id_viejo))
+        cur = conn.execute("UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (id_nuevo, id_viejo))
+        if cur.rowcount:
+            # Esto debería ser CERO para "Nuevo" (ya no es clave de MAPEO_ESTADOS_MIGRACION) —
+            # si este mensaje aparece mencionando "Nuevo" en el log, hay una migración
+            # todavía corriendo con código viejo (el .exe no tiene el fix aplicado).
+            _log_diagnostico(
+                f"migración: {cur.rowcount} cliente(s) movidos de estado '{nombre_viejo}' a "
+                f"'{nombre_nuevo}'"
+            )
         conn.execute("DELETE FROM estados WHERE id = ?", (id_viejo,))
 
     # Fase 2: asegura que existan (y con el orden correcto) todos los ESTADOS_SEED actuales.
