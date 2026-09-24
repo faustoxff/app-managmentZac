@@ -20,14 +20,20 @@ jobs:
       - name: Instalar Tesseract-OCR (para empaquetarlo dentro del .exe)
         shell: pwsh
         run: choco install tesseract -y --no-progress
-      - name: Agregar idioma español a Tesseract
+      - name: Asegurar idiomas de Tesseract (inglés + español)
         shell: pwsh
         run: |
+          # No asumimos que el paquete de Chocolatey trae ningún idioma incluido (en algunos
+          # runners no trae ni siquiera "eng", el default de Tesseract si no se pide "spa"
+          # explícitamente) — se descargan los dos siempre que falten, desde la misma fuente
+          # (tessdata_fast, compatible con la versión de Tesseract que instala choco).
           $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
-          if (-not (Test-Path "$tessdata\spa.traineddata")) {
-            Invoke-WebRequest `
-              -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/spa.traineddata" `
-              -OutFile "$tessdata\spa.traineddata"
+          foreach ($idioma in "eng", "spa") {
+            if (-not (Test-Path "$tessdata\$idioma.traineddata")) {
+              Invoke-WebRequest `
+                -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/$idioma.traineddata" `
+                -OutFile "$tessdata\$idioma.traineddata"
+            }
           }
       - name: Instalar dependencias
         run: pip install -r requirements.txt

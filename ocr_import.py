@@ -199,9 +199,23 @@ def _extraer_palabras(img: Image.Image) -> list[_Palabra]:
         # lang="spa" puede no estar instalado (o no poder cargarse); reintentamos con el
         # idioma por defecto y dejamos constancia para que la UI pueda avisar.
         _ultimo_uso_idioma_default = True
-        data = pytesseract.image_to_data(
-            img, config=config, output_type=pytesseract.Output.DICT
-        )
+        try:
+            data = pytesseract.image_to_data(
+                img, config=config, output_type=pytesseract.Output.DICT
+            )
+        except Exception as exc:
+            # Ni español ni el idioma por defecto pudieron cargar: la instalación de
+            # Tesseract-OCR (o su tessdata) está rota o incompleta. Antes esto se dejaba
+            # escapar sin capturar y la UI terminaba mostrando la excepción cruda de
+            # pytesseract (ej. "(1, 'Error opening data file ...')"), ilegible para alguien
+            # sin conocimientos técnicos.
+            raise TesseractNoDisponible(
+                "No se pudo cargar ningún idioma de reconocimiento de texto (ni español ni "
+                "el idioma por defecto). Puede ser un problema con la instalación de "
+                "Tesseract-OCR: si estás en el .exe empaquetado, probá reinstalarlo desde un "
+                "Release más reciente; si tenés Tesseract instalado aparte, revisá que la "
+                "carpeta \"tessdata\" tenga los archivos de idioma."
+            ) from exc
 
     palabras = []
     n = len(data.get("text", []))
