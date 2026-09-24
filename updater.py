@@ -123,6 +123,9 @@ set "OLD_EXE=%~1"
 set "NEW_EXE=%~2"
 set "BACKUP_EXE=%OLD_EXE%.old"
 
+set "LOG=%APPDATA%\GestorClientes\actualizacion.log"
+echo %date% %time% inicio: reemplazar "%OLD_EXE%" >> "%LOG%"
+
 set /a intentos=0
 :esperar
 if exist "%BACKUP_EXE%" del "%BACKUP_EXE%" >nul 2>&1
@@ -140,16 +143,19 @@ if not exist "%OLD_EXE%" goto :rollback
 for %%A in ("%OLD_EXE%") do if %%~zA EQU 0 goto :rollback
 
 del "%BACKUP_EXE%" >nul 2>&1
+echo %date% %time% OK: version nueva instalada >> "%LOG%"
 start "" "%OLD_EXE%"
 goto :borrarse
 
 :rollback
+echo %date% %time% FALLO: no se pudo instalar, se restauro la version VIEJA >> "%LOG%"
 if exist "%OLD_EXE%" del "%OLD_EXE%" >nul 2>&1
 ren "%BACKUP_EXE%" "%~nx1"
 start "" "%OLD_EXE%"
 goto :borrarse
 
 :abandonar
+echo %date% %time% FALLO: la app vieja no se cerro a tiempo, sigue la version VIEJA >> "%LOG%"
 start "" "%OLD_EXE%"
 
 :borrarse
@@ -165,6 +171,17 @@ def generar_bat(exe_viejo: Path, exe_nuevo: Path) -> Path:
     bat_path = carpeta_temp / "actualizar.bat"
     bat_path.write_text(BAT_TEMPLATE, encoding="utf-8")
     return bat_path
+
+
+def _entorno_para_relanzar() -> dict:
+    """Un .exe de PyInstaller --onefile deja variables de entorno (_MEIPASS2, _PYI_*) que
+    apuntan a su carpeta temporal de extracción. Si el proceso hijo las hereda, el .exe nuevo
+    cree ser una "segunda instancia" del viejo y usa ESA carpeta, que se borra apenas el viejo
+    cierra: resultado "Failed to load Python DLL (python311.dll)". Las sacamos y pedimos al
+    bootloader que arranque como proceso independiente."""
+    env = {k: v for k, v in os.environ.items() if k != "_MEIPASS2" and not k.startswith("_PYI_")}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
 
 
 def aplicar_actualizacion(path_exe_nuevo: Path) -> None:
@@ -186,6 +203,7 @@ def aplicar_actualizacion(path_exe_nuevo: Path) -> None:
         ["cmd", "/c", str(bat_path), str(exe_actual), str(path_exe_nuevo)],
         creationflags=creationflags,
         close_fds=True,
+        env=_entorno_para_relanzar(),
     )
     # Esto se llama desde un hilo de fondo (ver ActualizacionPopup._trabajo_descargar): un
     # sys.exit() ahí solo terminaría ESE hilo (lanza SystemExit únicamente en el hilo que lo

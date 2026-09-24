@@ -54,6 +54,8 @@ class App(tk.Tk):
         self._refrescar()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        if db.version_vieja_detectada():
+            self.after(500, self._avisar_version_vieja)
         self.bind_all("<Control-a>", self._atajo_nuevo_cliente)
         # Con Bloq Mayús activado, Windows manda el evento como Control-A (mayúscula) en vez
         # de Control-a — el bind es case-sensitive, así que sin esto el atajo no respondía con
@@ -95,6 +97,18 @@ class App(tk.Tk):
         menubar.add_cascade(label="Ayuda", menu=ayuda_menu)
 
         self.config(menu=menubar)
+
+    def _avisar_version_vieja(self):
+        import version
+
+        messagebox.showwarning(
+            "Versión vieja del programa",
+            f"Estás usando la v{version.__version__}, pero tus datos ya fueron usados por la "
+            f"v{db.version_vieja_detectada()}. Esta versión vieja puede desordenar los estados "
+            "de los clientes.\n\nCerrá el programa y abrí la versión más nueva "
+            "(Ayuda → Buscar actualización, o descargá el .exe de nuevo).",
+            parent=self,
+        )
 
     def _abrir_backup(self):
         BackupPopup(self)

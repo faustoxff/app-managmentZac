@@ -149,6 +149,22 @@ def _log_conteo_por_estado(conn: sqlite3.Connection, momento: str) -> None:
     _log_diagnostico(f"clientes por estado {momento}: " + ", ".join(f"{f['nombre']}={f['n']}" for f in filas))
 
 
+_version_vieja_detectada: str | None = None
+
+
+def version_vieja_detectada() -> str | None:
+    """Si esta app es MÁS VIEJA que la última que usó la base, devuelve esa versión más nueva
+    (la UI lo avisa). Una versión vieja no debe migrar/tocar una base que ya usó una nueva."""
+    return _version_vieja_detectada
+
+
+def _tupla_version(v: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(p) for p in v.strip().lstrip("vV").split("."))
+    except ValueError:
+        return (0,)
+
+
 def init_db() -> None:
     _log_diagnostico("arranque de la app (init_db)")
     _copia_de_seguridad_al_arrancar()
@@ -210,8 +226,25 @@ def init_db() -> None:
 
         integridad = conn.execute("PRAGMA integrity_check").fetchone()[0]
         _log_diagnostico(f"integridad de la base: {integridad}")
+        global _version_vieja_detectada
+        _version_vieja_detectada = None
+        conn.execute("CREATE TABLE IF NOT EXISTS meta (clave TEXT PRIMARY KEY, valor TEXT)")
+        fila = conn.execute("SELECT valor FROM meta WHERE clave = 'ultima_version'").fetchone()
+        ultima = fila["valor"] if fila else None
+        if ultima and _tupla_version(version.__version__) < _tupla_version(ultima):
+            _version_vieja_detectada = ultima
+            _log_diagnostico(
+                f"ATENCION: esta app (v{version.__version__}) es mas vieja que la ultima que uso "
+                f"esta base (v{ultima}). No se migra nada."
+            )
+        else:
+            conn.execute(
+                "INSERT OR REPLACE INTO meta (clave, valor) VALUES ('ultima_version', ?)",
+                (version.__version__,),
+            )
         _log_conteo_por_estado(conn, "antes de migrar")
-        _migrar_estados_a_nuevo_esquema(conn)
+        if _version_vieja_detectada is None:
+            _migrar_estados_a_nuevo_esquema(conn)
         _log_conteo_por_estado(conn, "despues de migrar")
 
 
