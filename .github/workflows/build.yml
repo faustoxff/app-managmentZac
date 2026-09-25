@@ -10,7 +10,27 @@ permissions:
   contents: write  # necesario para que el job "release" pueda crear la GitHub Release
 
 jobs:
+  tests:
+    # Si estas pruebas fallan, no se compila ni se publica nada: los clientes de un usuario
+    # nunca deben cambiar de estado solos al abrir/actualizar la app (ver tests/test_estados.py).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Pruebas de regresión (estados de clientes)
+        run: python -m unittest discover -s tests -v
+      - name: La versión del código tiene que coincidir con el tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          V=$(python -c "import version; print(version.__version__)")
+          if [ "v$V" != "${GITHUB_REF_NAME}" ]; then
+            echo "version.py dice $V pero el tag es ${GITHUB_REF_NAME}"; exit 1
+          fi
+
   build-windows:
+    needs: tests
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +68,7 @@ jobs:
           path: dist/GestorClientes.exe
 
   build-linux:
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
