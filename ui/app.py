@@ -260,6 +260,9 @@ class App(tk.Tk):
             estado_id=self.filtros.get("estado_id"),
             fecha_desde=self.filtros.get("fecha_desde"),
             fecha_hasta=self.filtros.get("fecha_hasta"),
+            recomendado_por=self.filtros.get("recomendado_por"),
+            alta_desde=self.filtros.get("alta_desde"),
+            alta_hasta=self.filtros.get("alta_hasta"),
             texto=texto_efectivo,
         )
         self.tree.delete(*self.tree.get_children())
@@ -299,10 +302,16 @@ class App(tk.Tk):
         partes = []
         if self.filtros.get("estado_nombre") and self.filtros["estado_nombre"] != "(Todos)":
             partes.append(f"Estado: {self.filtros['estado_nombre']}")
+        if self.filtros.get("recomendado_por"):
+            partes.append(f"Recomendado por: {self.filtros['recomendado_por']}")
+        if self.filtros.get("alta_desde"):
+            partes.append(f"Alta desde: {self.filtros['alta_desde']}")
+        if self.filtros.get("alta_hasta"):
+            partes.append(f"Alta hasta: {self.filtros['alta_hasta']}")
         if self.filtros.get("fecha_desde"):
-            partes.append(f"Desde: {self.filtros['fecha_desde']}")
+            partes.append(f"Actualizado desde: {self.filtros['fecha_desde']}")
         if self.filtros.get("fecha_hasta"):
-            partes.append(f"Hasta: {self.filtros['fecha_hasta']}")
+            partes.append(f"Actualizado hasta: {self.filtros['fecha_hasta']}")
         if self.filtros.get("texto"):
             partes.append(f"Texto: '{self.filtros['texto']}'")
         texto = "Filtros: " + " | ".join(partes) if partes else "Sin filtros aplicados"

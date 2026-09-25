@@ -1,5 +1,6 @@
+from datetime import datetime
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 import db
 
@@ -26,22 +27,34 @@ class FiltrosPopup(tk.Toplevel):
             self, textvariable=self.estado_var, values=nombres, state="readonly", width=27
         ).grid(row=0, column=1, **pad)
 
-        tk.Label(self, text="Desde (AAAA-MM-DD)").grid(row=1, column=0, sticky="w", **pad)
+        tk.Label(self, text="Recomendado por").grid(row=1, column=0, sticky="w", **pad)
+        self.recomendado_var = tk.StringVar(value=filtros_actuales.get("recomendado_por", ""))
+        ttk.Combobox(
+            self, textvariable=self.recomendado_var, values=[""] + db.listar_recomendados(), width=27
+        ).grid(row=1, column=1, **pad)
+
+        tk.Label(self, text="Fecha de alta desde (AAAA-MM-DD)").grid(row=2, column=0, sticky="w", **pad)
+        self.alta_desde_var = tk.StringVar(value=filtros_actuales.get("alta_desde", ""))
+        tk.Entry(self, textvariable=self.alta_desde_var, width=30).grid(row=2, column=1, **pad)
+
+        tk.Label(self, text="Fecha de alta hasta (AAAA-MM-DD)").grid(row=3, column=0, sticky="w", **pad)
+        self.alta_hasta_var = tk.StringVar(value=filtros_actuales.get("alta_hasta", ""))
+        tk.Entry(self, textvariable=self.alta_hasta_var, width=30).grid(row=3, column=1, **pad)
+
+        tk.Label(self, text="Última actualización desde").grid(row=4, column=0, sticky="w", **pad)
         self.desde_var = tk.StringVar(value=filtros_actuales.get("fecha_desde", ""))
-        tk.Entry(self, textvariable=self.desde_var, width=30).grid(row=1, column=1, **pad)
+        tk.Entry(self, textvariable=self.desde_var, width=30).grid(row=4, column=1, **pad)
 
-        tk.Label(self, text="Hasta (AAAA-MM-DD)").grid(row=2, column=0, sticky="w", **pad)
+        tk.Label(self, text="Última actualización hasta").grid(row=5, column=0, sticky="w", **pad)
         self.hasta_var = tk.StringVar(value=filtros_actuales.get("fecha_hasta", ""))
-        tk.Entry(self, textvariable=self.hasta_var, width=30).grid(row=2, column=1, **pad)
+        tk.Entry(self, textvariable=self.hasta_var, width=30).grid(row=5, column=1, **pad)
 
-        tk.Label(self, text="Texto (nombre/notas/recomendado por)").grid(
-            row=3, column=0, sticky="w", **pad
-        )
+        tk.Label(self, text="Texto (nombre/teléfono/notas)").grid(row=6, column=0, sticky="w", **pad)
         self.texto_var = tk.StringVar(value=filtros_actuales.get("texto", ""))
-        tk.Entry(self, textvariable=self.texto_var, width=30).grid(row=3, column=1, **pad)
+        tk.Entry(self, textvariable=self.texto_var, width=30).grid(row=6, column=1, **pad)
 
         btn_frame = tk.Frame(self)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=7, column=0, columnspan=2, pady=10)
         tk.Button(btn_frame, text="Aplicar", command=self._aplicar, width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Limpiar", command=self._limpiar, width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Cerrar", command=self.destroy, width=12).pack(side="left", padx=5)
@@ -54,7 +67,28 @@ class FiltrosPopup(tk.Toplevel):
         if estado_nombre != "(Todos)":
             estado_id = next((e.id for e in self.estados if e.nombre == estado_nombre), None)
 
+        for etiqueta, var in (
+            ("Fecha de alta desde", self.alta_desde_var),
+            ("Fecha de alta hasta", self.alta_hasta_var),
+            ("Última actualización desde", self.desde_var),
+            ("Última actualización hasta", self.hasta_var),
+        ):
+            valor = var.get().strip()
+            if valor:
+                try:
+                    datetime.strptime(valor, "%Y-%m-%d")
+                except ValueError:
+                    messagebox.showwarning(
+                        "Fecha inválida",
+                        f"'{etiqueta}' tiene que ser AAAA-MM-DD (por ejemplo 2026-09-24).",
+                        parent=self,
+                    )
+                    return
+
         filtros = {
+            "recomendado_por": self.recomendado_var.get().strip() or None,
+            "alta_desde": self.alta_desde_var.get().strip() or None,
+            "alta_hasta": self.alta_hasta_var.get().strip() or None,
             "estado_id": estado_id,
             "estado_nombre": estado_nombre,
             "fecha_desde": self.desde_var.get().strip() or None,

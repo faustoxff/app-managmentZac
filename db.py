@@ -396,11 +396,24 @@ def _row_to_cliente(r: sqlite3.Row) -> Cliente:
     )
 
 
+def listar_recomendados() -> list[str]:
+    """Valores distintos y no vacíos de "recomendado por", para armar la lista del filtro."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT TRIM(recomendado_por) AS r FROM clientes "
+            "WHERE recomendado_por IS NOT NULL AND TRIM(recomendado_por) != '' ORDER BY r COLLATE NOCASE"
+        ).fetchall()
+    return [r["r"] for r in rows]
+
+
 def listar_clientes(
     estado_id: Optional[int] = None,
     fecha_desde: Optional[str] = None,
     fecha_hasta: Optional[str] = None,
     texto: Optional[str] = None,
+    recomendado_por: Optional[str] = None,
+    alta_desde: Optional[str] = None,
+    alta_hasta: Optional[str] = None,
 ) -> list[Cliente]:
     query = """
         SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color
@@ -418,6 +431,22 @@ def listar_clientes(
     if fecha_hasta:
         query += " AND c.fecha_actualizacion <= ?"
         params.append(fecha_hasta + "T23:59:59")
+    if alta_desde:
+        query += " AND c.fecha_alta >= ?"
+        params.append(alta_desde)
+    if alta_hasta:
+        query += " AND c.fecha_alta <= ?"
+        params.append(alta_hasta + "T23:59:59")
+    recomendado_por = (recomendado_por or "").strip()
+    if recomendado_por:
+        # Si coincide exacto con un valor existente (elegido de la lista) se filtra por igualdad,
+        # para que "ARA" no traiga también "MARA"; si es texto suelto, busca por "contiene".
+        if recomendado_por.lower() in {r.lower() for r in listar_recomendados()}:
+            query += " AND LOWER(TRIM(c.recomendado_por)) = LOWER(?)"
+            params.append(recomendado_por)
+        else:
+            query += " AND c.recomendado_por LIKE ?"
+            params.append(f"%{recomendado_por}%")
     if texto:
         query += " AND (c.nombre LIKE ? OR c.contacto LIKE ? OR c.notas LIKE ? OR c.recomendado_por LIKE ?)"
         like = f"%{texto}%"
