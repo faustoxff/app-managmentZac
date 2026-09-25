@@ -19,7 +19,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Pruebas de regresión (estados de clientes)
+      - name: Instalar Pillow (lo usan las pruebas del OCR)
+        run: pip install pillow
+      - name: Pruebas de regresión (estados de clientes y config del OCR)
         run: python -m unittest discover -s tests -v
       - name: La versión del código tiene que coincidir con el tag
         if: startsWith(github.ref, 'refs/tags/v')
