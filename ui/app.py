@@ -214,28 +214,53 @@ class App(tk.Tk):
         self.filtros_label = tk.Label(self, text="", fg="gray20", anchor="w", padx=8)
         self.filtros_label.pack(fill="x")
 
+    # Ancho mínimo y máximo (en píxeles) que puede tomar cada columna al autoajustarse al
+    # contenido — sin mínimo, una columna con datos cortos queda ilegiblemente angosta; sin
+    # máximo, una sola nota gigante estiraría esa columna a un tamaño absurdo. "notas" tiene un
+    # techo más alto a propósito: es la razón por la que se pidió este autoajuste (antes se
+    # cortaba con datos largos).
+    ANCHOS_COLUMNA = {
+        "nombre": (100, 320),
+        "contacto": (90, 200),
+        "estado": (80, 160),
+        "fecha_alta": (90, 160),
+        "fecha": (90, 180),
+        "recomendado_por": (60, 200),
+        "recordatorio": (90, 160),
+        "notas": (120, 900),
+    }
+
     def _build_table(self):
         cols = ("nombre", "contacto", "estado", "fecha_alta", "fecha", "recomendado_por", "recordatorio", "notas")
         frame = tk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
-        self.tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
-        headers = {
-            "nombre": ("Nombre", 180),
-            "contacto": ("Contacto", 160),
-            "estado": ("Estado", 110),
-            "fecha_alta": ("Fecha de alta", 140),
-            "fecha": ("Última actualización", 150),
-            "recomendado_por": ("Recomendado por", 150),
-            "recordatorio": ("Recordatorio", 110),
-            "notas": ("Notas", 230),
-        }
-        for c, (label, width) in headers.items():
-            self.tree.heading(c, text=label, anchor="w")
-            self.tree.column(c, width=width, anchor="w")
+        # La barra horizontal se empaqueta ANTES que el contenedor de la tabla para que reserve
+        # su espacio abajo del todo — el contenedor (fill="both", expand=True) ocupa el resto.
+        hsb = ttk.Scrollbar(frame, orient="horizontal")
+        hsb.pack(side="bottom", fill="x")
 
-        vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=vsb.set)
+        tree_container = tk.Frame(frame)
+        tree_container.pack(fill="both", expand=True)
+
+        self.tree = ttk.Treeview(tree_container, columns=cols, show="headings", selectmode="extended")
+        self._encabezados_columna = {
+            "nombre": "Nombre",
+            "contacto": "Contacto",
+            "estado": "Estado",
+            "fecha_alta": "Fecha de alta",
+            "fecha": "Última actualización",
+            "recomendado_por": "Rec.",
+            "recordatorio": "Recordatorio",
+            "notas": "Notas",
+        }
+        for c, label in self._encabezados_columna.items():
+            self.tree.heading(c, text=label, anchor="w")
+            self.tree.column(c, width=self.ANCHOS_COLUMNA[c][0], anchor="w", stretch=False)
+
+        vsb = ttk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
+        hsb.configure(command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
@@ -244,6 +269,33 @@ class App(tk.Tk):
         self.tree.bind("<Button-1>", self._click_tabla)
         self.tree.bind("<Double-1>", self._doble_click_tabla)
         self.tree.bind("<Control-c>", self._copiar_celda)
+
+    def _autoajustar_columnas(self, clientes):
+        """Cada columna se ensancha para que entre el texto más largo que tenga (encabezado
+        incluido), dentro de los límites de ANCHOS_COLUMNA — así una nota larga no se corta sin
+        tener que agrandar todas las demás columnas a lo bestia."""
+        import tkinter.font as tkfont
+
+        fuente = tkfont.nametofont("TkDefaultFont")
+        columnas = self.tree["columns"]
+        atributo_por_columna = {
+            "nombre": "nombre",
+            "contacto": "contacto",
+            "estado": "estado_nombre",
+            "recomendado_por": "recomendado_por",
+            "notas": "notas",
+        }
+        for col in columnas:
+            minimo, maximo = self.ANCHOS_COLUMNA[col]
+            ancho = fuente.measure(self._encabezados_columna[col]) + 24  # +padding del heading
+            if col in atributo_por_columna:
+                for c in clientes:
+                    texto = getattr(c, atributo_por_columna[col]) or ""
+                    primera_linea = texto.split("\n", 1)[0]  # el ancho no sigue saltos de línea
+                    ancho = max(ancho, fuente.measure(primera_linea) + 16)
+            elif col in ("fecha_alta", "fecha", "recordatorio"):
+                ancho = max(ancho, fuente.measure("31/12/2026") + 16)
+            self.tree.column(col, width=max(minimo, min(ancho, maximo)))
 
     # ---------- búsqueda rápida ----------
 
@@ -308,6 +360,7 @@ class App(tk.Tk):
                 tags=(tag,),
             )
         self._clientes_actuales = clientes
+        self._autoajustar_columnas(clientes)
         self._actualizar_label_filtros()
 
     @staticmethod
