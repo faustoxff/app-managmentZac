@@ -1,6 +1,7 @@
 import queue
 import threading
 import tkinter as tk
+from datetime import date, datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -61,6 +62,25 @@ class App(tk.Tk):
         # de Control-a — el bind es case-sensitive, así que sin esto el atajo no respondía con
         # Bloq Mayús puesto (algo común en esta app, que fuerza nombres en mayúscula).
         self.bind_all("<Control-A>", self._atajo_nuevo_cliente)
+        self._chequear_recordatorios()
+
+    def _chequear_recordatorios(self):
+        """A partir de las 8am, avisa una vez por día (por cliente) quién tiene recordatorio
+        para hoy. Se revisa cada minuto (self.after) en vez de solo al abrir, para que si la
+        app ya estaba abierta antes de las 8 el aviso salte igual sin tener que reabrirla."""
+        self.after(60_000, self._chequear_recordatorios)
+        ahora = datetime.now()
+        if ahora.hour < 8:
+            return
+        hoy = date.today().isoformat()
+        avisados = set(config.obtener_recordatorios_avisados_hoy(hoy))
+        pendientes = [c for c in db.listar_recordatorios_de_hoy() if c.id not in avisados]
+        if not pendientes:
+            return
+        nombres = "\n".join(f"• {c.nombre}" for c in pendientes)
+        plural = "vienen hoy" if len(pendientes) > 1 else "viene hoy"
+        messagebox.showinfo("Recordatorio", f"{nombres}\n\n{plural}.", parent=self)
+        config.agregar_recordatorios_avisados_hoy(hoy, [c.id for c in pendientes])
 
     def _on_close(self):
         if self.photo_server is not None:
@@ -195,7 +215,7 @@ class App(tk.Tk):
         self.filtros_label.pack(fill="x")
 
     def _build_table(self):
-        cols = ("nombre", "contacto", "estado", "fecha_alta", "fecha", "recomendado_por", "notas")
+        cols = ("nombre", "contacto", "estado", "fecha_alta", "fecha", "recomendado_por", "recordatorio", "notas")
         frame = tk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
@@ -207,6 +227,7 @@ class App(tk.Tk):
             "fecha_alta": ("Fecha de alta", 140),
             "fecha": ("Última actualización", 150),
             "recomendado_por": ("Recomendado por", 150),
+            "recordatorio": ("Recordatorio", 110),
             "notas": ("Notas", 230),
         }
         for c, (label, width) in headers.items():
@@ -281,6 +302,7 @@ class App(tk.Tk):
                     formatear_fecha(c.fecha_alta),
                     formatear_fecha(c.fecha_actualizacion),
                     c.recomendado_por,
+                    formatear_fecha(c.fecha_recordatorio) if c.fecha_recordatorio else "",
                     c.notas,
                 ),
                 tags=(tag,),

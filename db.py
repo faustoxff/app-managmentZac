@@ -197,6 +197,8 @@ def init_db() -> None:
         columnas = {r["name"] for r in conn.execute("PRAGMA table_info(clientes)").fetchall()}
         if "recomendado_por" not in columnas:
             conn.execute("ALTER TABLE clientes ADD COLUMN recomendado_por TEXT")
+        if "fecha_recordatorio" not in columnas:
+            conn.execute("ALTER TABLE clientes ADD COLUMN fecha_recordatorio TEXT")
         if "contacto_normalizado" not in columnas:
             conn.execute("ALTER TABLE clientes ADD COLUMN contacto_normalizado TEXT")
             conn.execute(
@@ -391,6 +393,7 @@ def _row_to_cliente(r: sqlite3.Row) -> Cliente:
         fecha_alta=r["fecha_alta"] or r["fecha_actualizacion"],
         notas=r["notas"] or "",
         recomendado_por=r["recomendado_por"] or "",
+        fecha_recordatorio=r["fecha_recordatorio"] or "",
         estado_nombre=r["estado_nombre"],
         estado_color=r["estado_color"],
     )
@@ -459,7 +462,12 @@ def listar_clientes(
 
 
 def crear_cliente(
-    nombre: str, contacto: str, estado_id: int, notas: str = "", recomendado_por: str = ""
+    nombre: str,
+    contacto: str,
+    estado_id: int,
+    notas: str = "",
+    recomendado_por: str = "",
+    fecha_recordatorio: str = "",
 ) -> int:
     nombre = normalizar_nombre(nombre)
     with get_conn() as conn:
@@ -467,8 +475,11 @@ def crear_cliente(
         cur = conn.execute(
             "INSERT INTO clientes "
             "(nombre, contacto, estado_id, fecha_actualizacion, fecha_alta, notas, recomendado_por, "
-            "contacto_normalizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (nombre, contacto, estado_id, ahora, ahora, notas, recomendado_por, normalizar_telefono(contacto)),
+            "fecha_recordatorio, contacto_normalizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                nombre, contacto, estado_id, ahora, ahora, notas, recomendado_por,
+                fecha_recordatorio or None, normalizar_telefono(contacto),
+            ),
         )
         return cur.lastrowid
 
@@ -480,13 +491,15 @@ def actualizar_cliente(
     estado_id: int,
     notas: str,
     recomendado_por: str = "",
+    fecha_recordatorio: str = "",
 ) -> None:
     nombre = normalizar_nombre(nombre)
     with get_conn() as conn:
         # fecha_alta NO se toca acá a propósito: se setea una sola vez, al crear el registro.
         conn.execute(
             "UPDATE clientes SET nombre = ?, contacto = ?, estado_id = ?, "
-            "fecha_actualizacion = ?, notas = ?, recomendado_por = ?, contacto_normalizado = ? WHERE id = ?",
+            "fecha_actualizacion = ?, notas = ?, recomendado_por = ?, fecha_recordatorio = ?, "
+            "contacto_normalizado = ? WHERE id = ?",
             (
                 nombre,
                 contacto,
@@ -494,10 +507,27 @@ def actualizar_cliente(
                 _now_iso(),
                 notas,
                 recomendado_por,
+                fecha_recordatorio or None,
                 normalizar_telefono(contacto),
                 cliente_id,
             ),
         )
+
+
+def listar_recordatorios_de_hoy() -> list[Cliente]:
+    """Clientes cuyo recordatorio es HOY (fecha local). Usado para el aviso de las 8am."""
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color
+            FROM clientes c JOIN estados e ON e.id = c.estado_id
+            WHERE c.fecha_recordatorio = ?
+            ORDER BY c.nombre
+            """,
+            (hoy,),
+        ).fetchall()
+        return [_row_to_cliente(r) for r in rows]
 
 
 def buscar_duplicados(nombre: str, contacto: str) -> list[Cliente]:

@@ -94,3 +94,21 @@ def guardar_backup_automatico(activo: bool) -> None:
     datos = _leer_config()
     datos["backup_automatico"] = bool(activo)
     _escribir_config(datos)
+
+
+def obtener_recordatorios_avisados_hoy(hoy: str) -> list[int]:
+    """IDs de clientes cuyo aviso de recordatorio ("Fulano viene hoy") ya se mostró en el día
+    `hoy` (AAAA-MM-DD) — para no repetir el cartel si se reabre la app el mismo día. Se guarda
+    junto con la fecha: si `hoy` no coincide con lo guardado, es de otro día y no cuenta."""
+    datos = _leer_config().get("recordatorios_avisados", {})
+    if datos.get("fecha") != hoy:
+        return []
+    return datos.get("ids", [])
+
+
+def agregar_recordatorios_avisados_hoy(hoy: str, ids_nuevos: list[int]) -> None:
+    ya_avisados = set(obtener_recordatorios_avisados_hoy(hoy))
+    ya_avisados.update(ids_nuevos)
+    datos = _leer_config()
+    datos["recordatorios_avisados"] = {"fecha": hoy, "ids": sorted(ya_avisados)}
+    _escribir_config(datos)

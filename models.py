@@ -20,6 +20,7 @@ class Cliente:
     fecha_alta: str = ""
     notas: str = ""
     recomendado_por: str = ""
+    fecha_recordatorio: str = ""  # "AAAA-MM-DD" o "" si no tiene — ver db.listar_recordatorios_de_hoy
     # Campos de conveniencia, se rellenan al leer con JOIN
     estado_nombre: str = ""
     estado_color: str = "#808080"

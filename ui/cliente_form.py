@@ -1,8 +1,10 @@
+from datetime import date
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 import db
 from models import Cliente
+from ui.calendario_popup import CalendarioPopup
 from ui.duplicado_popup import DuplicadoPopup
 
 
@@ -55,23 +57,34 @@ class ClienteForm(tk.Toplevel):
         recomendado_entry = tk.Entry(self, textvariable=self.recomendado_var, width=40)
         recomendado_entry.grid(row=3, column=1, **pad)
 
+        tk.Label(self, text="Recordatorio").grid(row=4, column=0, sticky="w", **pad)
+        recordatorio_frame = tk.Frame(self)
+        recordatorio_frame.grid(row=4, column=1, sticky="w", **pad)
+        self._recordatorio_fecha = cliente.fecha_recordatorio if cliente else ""
+        self.recordatorio_label = tk.Label(recordatorio_frame, text="", width=24, anchor="w", relief="sunken")
+        self.recordatorio_label.pack(side="left")
+        tk.Button(recordatorio_frame, text="📅", width=3, command=self._elegir_recordatorio).pack(
+            side="left", padx=(4, 0)
+        )
+        self._refrescar_label_recordatorio()
+
         # Enter guarda directo desde cualquiera de estos campos (no en Notas, ahí Enter tiene
         # que seguir insertando un salto de línea como siempre).
         for widget in (self.nombre_entry, contacto_entry, self.estado_combo, recomendado_entry):
             widget.bind("<Return>", self._enter_guarda)
 
-        tk.Label(self, text="Notas").grid(row=4, column=0, sticky="nw", **pad)
+        tk.Label(self, text="Notas").grid(row=5, column=0, sticky="nw", **pad)
         self.notas_text = tk.Text(self, width=40, height=6)
         if cliente:
             self.notas_text.insert("1.0", cliente.notas)
-        self.notas_text.grid(row=4, column=1, **pad)
+        self.notas_text.grid(row=5, column=1, **pad)
         # Por default, Tab en un Text de Tkinter inserta una tabulación en vez de mover el
         # foco (a diferencia de un Entry) — acá lo pisamos para que vaya directo a Guardar y
         # se pueda cargar un cliente entero sin tocar el mouse.
         self.notas_text.bind("<Tab>", self._tab_a_guardar)
 
         btn_frame = tk.Frame(self)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=(10, 0))
+        btn_frame.grid(row=6, column=0, columnspan=2, pady=(10, 0))
         self.guardar_btn = tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12)
         self.guardar_btn.pack(side="left", padx=5)
         # Los botones de Tkinter solo invocan su comando con la tecla Espacio, no con Enter
@@ -82,7 +95,7 @@ class ClienteForm(tk.Toplevel):
         tk.Button(btn_frame, text=cierra, command=self.destroy, width=12).pack(side="left", padx=5)
 
         self.guardado_label = tk.Label(self, text="", fg="#16a34a")
-        self.guardado_label.grid(row=6, column=0, columnspan=2, pady=(4, 8))
+        self.guardado_label.grid(row=7, column=0, columnspan=2, pady=(4, 8))
 
         self.nombre_entry.focus_set()
 
@@ -93,6 +106,23 @@ class ClienteForm(tk.Toplevel):
     def _enter_guarda(self, event):
         self._guardar()
         return "break"
+
+    def _elegir_recordatorio(self):
+        CalendarioPopup(self, on_elegir=self._set_recordatorio, fecha_inicial=self._recordatorio_fecha)
+
+    def _set_recordatorio(self, fecha_iso: str):
+        self._recordatorio_fecha = fecha_iso
+        self._refrescar_label_recordatorio()
+
+    def _refrescar_label_recordatorio(self):
+        if not self._recordatorio_fecha:
+            self.recordatorio_label.config(text="(sin fecha)", fg="gray40")
+            return
+        try:
+            d = date.fromisoformat(self._recordatorio_fecha)
+            self.recordatorio_label.config(text=d.strftime("%d/%m/%Y"), fg="black")
+        except ValueError:
+            self.recordatorio_label.config(text="(sin fecha)", fg="gray40")
 
     def _forzar_mayusculas(self, *_args):
         """Se ve en mayúscula mientras se escribe, no solo al guardar (db.crear_cliente ya lo
@@ -129,12 +159,15 @@ class ClienteForm(tk.Toplevel):
 
     def _guardar_final(self, nombre, contacto, estado_id, notas, recomendado_por):
         if self.cliente:
-            db.actualizar_cliente(self.cliente.id, nombre, contacto, estado_id, notas, recomendado_por)
+            db.actualizar_cliente(
+                self.cliente.id, nombre, contacto, estado_id, notas, recomendado_por,
+                self._recordatorio_fecha,
+            )
             self.on_saved()
             self.destroy()
             return
 
-        db.crear_cliente(nombre, contacto, estado_id, notas, recomendado_por)
+        db.crear_cliente(nombre, contacto, estado_id, notas, recomendado_por, self._recordatorio_fecha)
         self.on_saved()
         # A diferencia de editar, acá dejamos la ventana abierta y limpiamos los campos: es
         # común cargar varios clientes nuevos seguidos (ej. una planilla que se pasa a mano),
@@ -146,6 +179,8 @@ class ClienteForm(tk.Toplevel):
         self.contacto_var.set("")
         self.recomendado_var.set("")
         self.notas_text.delete("1.0", "end")
+        self._recordatorio_fecha = ""
+        self._refrescar_label_recordatorio()
         self.guardado_label.config(text=f"✓ {nombre_guardado} guardado — listo para cargar otro")
         self.nombre_entry.focus_set()
 
