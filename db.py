@@ -417,6 +417,7 @@ def listar_clientes(
     recomendado_por: Optional[str] = None,
     alta_desde: Optional[str] = None,
     alta_hasta: Optional[str] = None,
+    con_recordatorio: Optional[bool] = None,
 ) -> list[Cliente]:
     query = """
         SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color
@@ -440,6 +441,10 @@ def listar_clientes(
     if alta_hasta:
         query += " AND c.fecha_alta <= ?"
         params.append(alta_hasta + "T23:59:59")
+    if con_recordatorio is True:
+        query += " AND c.fecha_recordatorio IS NOT NULL AND c.fecha_recordatorio != ''"
+    elif con_recordatorio is False:
+        query += " AND (c.fecha_recordatorio IS NULL OR c.fecha_recordatorio = '')"
     recomendado_por = (recomendado_por or "").strip()
     if recomendado_por:
         # Si coincide exacto con un valor existente (elegido de la lista) se filtra por igualdad,

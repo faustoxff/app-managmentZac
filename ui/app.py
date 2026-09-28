@@ -336,6 +336,7 @@ class App(tk.Tk):
             recomendado_por=self.filtros.get("recomendado_por"),
             alta_desde=self.filtros.get("alta_desde"),
             alta_hasta=self.filtros.get("alta_hasta"),
+            con_recordatorio=self.filtros.get("con_recordatorio"),
             texto=texto_efectivo,
         )
         self.tree.delete(*self.tree.get_children())
@@ -387,6 +388,10 @@ class App(tk.Tk):
             partes.append(f"Actualizado desde: {self.filtros['fecha_desde']}")
         if self.filtros.get("fecha_hasta"):
             partes.append(f"Actualizado hasta: {self.filtros['fecha_hasta']}")
+        if self.filtros.get("con_recordatorio") is True:
+            partes.append("Con recordatorio")
+        elif self.filtros.get("con_recordatorio") is False:
+            partes.append("Sin recordatorio")
         if self.filtros.get("texto"):
             partes.append(f"Texto: '{self.filtros['texto']}'")
         texto = "Filtros: " + " | ".join(partes) if partes else "Sin filtros aplicados"

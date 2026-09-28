@@ -45,3 +45,26 @@ class TestRecordatorios(BaseDB):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFiltroConRecordatorio(BaseDB):
+    def setUp(self):
+        super().setUp()
+        db.init_db()
+        from datetime import date
+
+        nuevo = self.estado_id("Nuevo")
+        db.crear_cliente("CON TURNO", "1", nuevo, "", "", date.today().isoformat())
+        db.crear_cliente("SIN TURNO", "2", nuevo, "", "")
+
+    def test_filtro_con_recordatorio(self):
+        nombres = sorted(c.nombre for c in db.listar_clientes(con_recordatorio=True))
+        self.assertEqual(nombres, ["CON TURNO"])
+
+    def test_filtro_sin_recordatorio(self):
+        nombres = sorted(c.nombre for c in db.listar_clientes(con_recordatorio=False))
+        self.assertEqual(nombres, ["SIN TURNO"])
+
+    def test_sin_filtro_trae_los_dos(self):
+        nombres = sorted(c.nombre for c in db.listar_clientes())
+        self.assertEqual(nombres, ["CON TURNO", "SIN TURNO"])

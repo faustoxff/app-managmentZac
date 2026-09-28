@@ -49,12 +49,26 @@ class FiltrosPopup(tk.Toplevel):
         self.hasta_var = tk.StringVar(value=filtros_actuales.get("fecha_hasta", ""))
         tk.Entry(self, textvariable=self.hasta_var, width=30).grid(row=5, column=1, **pad)
 
-        tk.Label(self, text="Texto (nombre/teléfono/notas)").grid(row=6, column=0, sticky="w", **pad)
+        tk.Label(self, text="Recordatorio").grid(row=6, column=0, sticky="w", **pad)
+        con_recordatorio = filtros_actuales.get("con_recordatorio")
+        valor_inicial = (
+            "(Todos)" if con_recordatorio is None else "Con recordatorio" if con_recordatorio else "Sin recordatorio"
+        )
+        self.recordatorio_var = tk.StringVar(value=valor_inicial)
+        ttk.Combobox(
+            self,
+            textvariable=self.recordatorio_var,
+            values=["(Todos)", "Con recordatorio", "Sin recordatorio"],
+            state="readonly",
+            width=27,
+        ).grid(row=6, column=1, **pad)
+
+        tk.Label(self, text="Texto (nombre/teléfono/notas)").grid(row=7, column=0, sticky="w", **pad)
         self.texto_var = tk.StringVar(value=filtros_actuales.get("texto", ""))
-        tk.Entry(self, textvariable=self.texto_var, width=30).grid(row=6, column=1, **pad)
+        tk.Entry(self, textvariable=self.texto_var, width=30).grid(row=7, column=1, **pad)
 
         btn_frame = tk.Frame(self)
-        btn_frame.grid(row=7, column=0, columnspan=2, pady=10)
+        btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
         tk.Button(btn_frame, text="Aplicar", command=self._aplicar, width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Limpiar", command=self._limpiar, width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Cerrar", command=self.destroy, width=12).pack(side="left", padx=5)
@@ -85,7 +99,13 @@ class FiltrosPopup(tk.Toplevel):
                     )
                     return
 
+        valor_recordatorio = self.recordatorio_var.get()
+        con_recordatorio = (
+            None if valor_recordatorio == "(Todos)" else valor_recordatorio == "Con recordatorio"
+        )
+
         filtros = {
+            "con_recordatorio": con_recordatorio,
             "recomendado_por": self.recomendado_var.get().strip() or None,
             "alta_desde": self.alta_desde_var.get().strip() or None,
             "alta_hasta": self.alta_hasta_var.get().strip() or None,
