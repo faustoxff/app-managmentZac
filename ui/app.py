@@ -356,6 +356,7 @@ class App(tk.Tk):
             alta_hasta=self.filtros.get("alta_hasta"),
             con_recordatorio=self.filtros.get("con_recordatorio"),
             texto=texto_efectivo,
+            agrupar_por_estado=self._hay_filtro_activo(),
         )
         self.tree.delete(*self.tree.get_children())
         for c in clientes:
@@ -569,14 +570,21 @@ class App(tk.Tk):
         self._refrescar()
         self._actualizar_boton_limpiar_filtro()
 
-    def _actualizar_boton_limpiar_filtro(self):
+    def _hay_filtro_popup_activo(self) -> bool:
         # "estado_nombre" vale "(Todos)" cuando en realidad no hay filtro de estado elegido —
         # se excluye acá para no dejar el botón habilitado sin que haya ningún filtro real.
-        hay_filtro = any(
+        return any(
             valor not in (None, "", "(Todos)") for clave, valor in self.filtros.items()
             if clave != "estado_nombre"
         )
-        self.limpiar_filtro_btn.config(state="normal" if hay_filtro else "disabled")
+
+    def _hay_filtro_activo(self) -> bool:
+        # Además del popup de Filtros, la búsqueda rápida también cuenta como "hay un filtro
+        # puesto": buscar por nombre/teléfono igual puede traer varios estados mezclados.
+        return self._hay_filtro_popup_activo() or bool(self.busqueda_rapida)
+
+    def _actualizar_boton_limpiar_filtro(self):
+        self.limpiar_filtro_btn.config(state="normal" if self._hay_filtro_popup_activo() else "disabled")
 
     def _abrir_estados(self):
         EstadosPopup(self, on_change=self._refrescar)

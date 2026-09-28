@@ -65,3 +65,25 @@ class TestFiltros(BaseDB):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAgruparPorEstado(BaseDB):
+    def setUp(self):
+        super().setUp()
+        db.init_db()
+
+    def test_sin_agrupar_respeta_orden_por_fecha(self):
+        E = {e.nombre: e.id for e in db.listar_estados()}
+        db.crear_cliente("A", "1", E["Descartado"])
+        db.crear_cliente("B", "2", E["Esperar"])
+        nombres = [c.nombre for c in db.listar_clientes()]
+        self.assertEqual(nombres, ["B", "A"])  # más reciente primero
+
+    def test_agrupado_junta_mismo_estado_aunque_se_mezclen_las_fechas(self):
+        E = {e.nombre: e.id for e in db.listar_estados()}
+        db.crear_cliente("A1", "1", E["Esperar"])
+        db.crear_cliente("A2", "2", E["Descartado"])
+        db.crear_cliente("A3", "3", E["Esperar"])
+        estados = [c.estado_nombre for c in db.listar_clientes(agrupar_por_estado=True)]
+        # "Descartado" va antes que "Esperar" según ESTADOS_SEED (su índice de orden es menor).
+        self.assertEqual(estados, ["Descartado", "Esperar", "Esperar"])

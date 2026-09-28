@@ -418,6 +418,7 @@ def listar_clientes(
     alta_desde: Optional[str] = None,
     alta_hasta: Optional[str] = None,
     con_recordatorio: Optional[bool] = None,
+    agrupar_por_estado: bool = False,
 ) -> list[Cliente]:
     query = """
         SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color
@@ -459,7 +460,13 @@ def listar_clientes(
         query += " AND (c.nombre LIKE ? OR c.contacto LIKE ? OR c.notas LIKE ? OR c.recomendado_por LIKE ?)"
         like = f"%{texto}%"
         params.extend([like, like, like, like])
-    query += " ORDER BY c.fecha_actualizacion DESC"
+    # Con un filtro aplicado, conviene agrupar por estado (ej. filtrás por "recomendado por" y
+    # aparecen mezclados Descartados, Esperar, etc. — se ordena por estado primero para que
+    # queden juntos, y adentro de cada grupo, los más recientes primero como siempre).
+    if agrupar_por_estado:
+        query += " ORDER BY e.orden ASC, c.fecha_actualizacion DESC"
+    else:
+        query += " ORDER BY c.fecha_actualizacion DESC"
 
     with get_conn() as conn:
         rows = conn.execute(query, params).fetchall()
