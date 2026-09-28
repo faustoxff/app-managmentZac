@@ -57,7 +57,77 @@ class TestColumnasAutoajuste(BaseDB):
     def test_encabezado_recomendado_por_es_corto(self):
         app = self._app()
         try:
-            self.assertEqual(app.tree.heading("recomendado_por")["text"], "Rec.")
+            self.assertEqual(app.tree.heading("recomendado_por")["text"], "REC.")
+        finally:
+            app.destroy()
+
+    def test_encabezados_en_mayuscula(self):
+        app = self._app()
+        try:
+            for col in app.tree["columns"]:
+                texto = app.tree.heading(col)["text"]
+                self.assertEqual(texto, texto.upper())
+        finally:
+            app.destroy()
+
+
+
+class TestBotonLimpiarFiltroYSeleccion(BaseDB):
+    def setUp(self):
+        super().setUp()
+        db.init_db()
+        nuevo = self.estado_id("Nuevo")
+        db.crear_cliente("A", "1", nuevo)
+        db.crear_cliente("B", "2", nuevo)
+        db.crear_cliente("C", "3", nuevo)
+
+    def _app(self):
+        import tkinter as tk
+
+        if not hasattr(self, "_root_probado"):
+            try:
+                tk.Tk().destroy()
+            except tk.TclError:
+                self.skipTest("sin display disponible para probar Tkinter")
+            self._root_probado = True
+        from ui.app import App
+
+        return App()
+
+    def test_boton_limpiar_filtro_se_habilita_y_limpia(self):
+        app = self._app()
+        try:
+            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "disabled")
+            app._aplicar_filtros({"recomendado_por": "ARA"})
+            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "normal")
+            app._limpiar_filtro()
+            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "disabled")
+            self.assertEqual(app.filtros, {})
+        finally:
+            app.destroy()
+
+    def test_estado_todos_no_cuenta_como_filtro_activo(self):
+        app = self._app()
+        try:
+            app._aplicar_filtros({"estado_nombre": "(Todos)"})
+            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "disabled")
+        finally:
+            app.destroy()
+
+    def test_contador_de_seleccionados(self):
+        app = self._app()
+        try:
+            ids = [str(c.id) for c in app._clientes_actuales]
+            self.assertEqual(app.seleccion_label.cget("text"), "")
+            app.tree.selection_set(ids[0])
+            app.update()
+            self.assertEqual(app.seleccion_label.cget("text"), "1 cliente seleccionado")
+            app.tree.selection_set(ids)
+            app.update()
+            self.assertEqual(app.seleccion_label.cget("text"), "3 clientes seleccionados")
+            app.tree.selection_remove(*ids)
+            app.update()
+            self.assertEqual(app.seleccion_label.cget("text"), "")
         finally:
             app.destroy()
 

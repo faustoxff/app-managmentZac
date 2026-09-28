@@ -178,6 +178,10 @@ class App(tk.Tk):
         tk.Button(bar, text="Editar", command=self._editar_cliente).pack(side="left", padx=4)
         tk.Button(bar, text="Borrar", command=self._borrar_cliente).pack(side="left", padx=4)
         tk.Button(bar, text="Filtros", command=self._abrir_filtros).pack(side="left", padx=4)
+        self.limpiar_filtro_btn = tk.Button(
+            bar, text="Limpiar filtro", command=self._limpiar_filtro, state="disabled"
+        )
+        self.limpiar_filtro_btn.pack(side="left", padx=(0, 4))
         tk.Button(bar, text="Estados", command=self._abrir_estados).pack(side="left", padx=4)
         tk.Button(bar, text="Imprimir seleccionados", command=self._imprimir).pack(side="left", padx=4)
         tk.Button(bar, text="Editar seleccionados", command=self._editar_seleccionados).pack(
@@ -211,8 +215,12 @@ class App(tk.Tk):
             busqueda_frame, text="(nombre o teléfono — convive con el popup de Filtros)", fg="gray40"
         ).pack(side="left", padx=(8, 0))
 
-        self.filtros_label = tk.Label(self, text="", fg="gray20", anchor="w", padx=8)
-        self.filtros_label.pack(fill="x")
+        estado_frame = tk.Frame(self)
+        estado_frame.pack(fill="x")
+        self.filtros_label = tk.Label(estado_frame, text="", fg="gray20", anchor="w", padx=8)
+        self.filtros_label.pack(side="left", fill="x", expand=True)
+        self.seleccion_label = tk.Label(estado_frame, text="", fg="#2563eb", anchor="e", padx=8)
+        self.seleccion_label.pack(side="right")
 
     # Ancho mínimo y máximo (en píxeles) que puede tomar cada columna al autoajustarse al
     # contenido — sin mínimo, una columna con datos cortos queda ilegiblemente angosta; sin
@@ -245,14 +253,14 @@ class App(tk.Tk):
 
         self.tree = ttk.Treeview(tree_container, columns=cols, show="headings", selectmode="extended")
         self._encabezados_columna = {
-            "nombre": "Nombre",
-            "contacto": "Contacto",
-            "estado": "Estado",
-            "fecha_alta": "Fecha de alta",
-            "fecha": "Última actualización",
-            "recomendado_por": "Rec.",
-            "recordatorio": "Recordatorio",
-            "notas": "Notas",
+            "nombre": "NOMBRE",
+            "contacto": "CONTACTO",
+            "estado": "ESTADO",
+            "fecha_alta": "FECHA DE ALTA",
+            "fecha": "ÚLTIMA ACTUALIZACIÓN",
+            "recomendado_por": "REC.",
+            "recordatorio": "RECORDATORIO",
+            "notas": "NOTAS",
         }
         for c, label in self._encabezados_columna.items():
             self.tree.heading(c, text=label, anchor="w")
@@ -269,6 +277,16 @@ class App(tk.Tk):
         self.tree.bind("<Button-1>", self._click_tabla)
         self.tree.bind("<Double-1>", self._doble_click_tabla)
         self.tree.bind("<Control-c>", self._copiar_celda)
+        self.tree.bind("<<TreeviewSelect>>", self._actualizar_seleccion_label)
+
+    def _actualizar_seleccion_label(self, event=None):
+        n = len(self.tree.selection())
+        if n == 0:
+            self.seleccion_label.config(text="")
+        elif n == 1:
+            self.seleccion_label.config(text="1 cliente seleccionado")
+        else:
+            self.seleccion_label.config(text=f"{n} clientes seleccionados")
 
     def _autoajustar_columnas(self, clientes):
         """Cada columna se ensancha para que entre el texto más largo que tenga (encabezado
@@ -363,6 +381,7 @@ class App(tk.Tk):
         self._clientes_actuales = clientes
         self._autoajustar_columnas(clientes)
         self._actualizar_label_filtros()
+        self._actualizar_seleccion_label()
 
     @staticmethod
     def _suavizar(hex_color: str) -> str:
@@ -543,6 +562,21 @@ class App(tk.Tk):
     def _aplicar_filtros(self, filtros: dict):
         self.filtros = filtros
         self._refrescar()
+        self._actualizar_boton_limpiar_filtro()
+
+    def _limpiar_filtro(self):
+        self.filtros = {}
+        self._refrescar()
+        self._actualizar_boton_limpiar_filtro()
+
+    def _actualizar_boton_limpiar_filtro(self):
+        # "estado_nombre" vale "(Todos)" cuando en realidad no hay filtro de estado elegido —
+        # se excluye acá para no dejar el botón habilitado sin que haya ningún filtro real.
+        hay_filtro = any(
+            valor not in (None, "", "(Todos)") for clave, valor in self.filtros.items()
+            if clave != "estado_nombre"
+        )
+        self.limpiar_filtro_btn.config(state="normal" if hay_filtro else "disabled")
 
     def _abrir_estados(self):
         EstadosPopup(self, on_change=self._refrescar)
