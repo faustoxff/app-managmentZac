@@ -51,24 +51,26 @@ class TestEstadosNoCambianSolos(BaseDB):
     def test_nuevo_no_pasa_a_esperar(self):
         db.init_db()
         for i in range(5):
-            db.crear_cliente(f"N{i}", f"1160000{i}00", self.estado_id("Nuevo"))
+            db.crear_cliente(f"N{i}", f"1160000{i}00", self.estado_id("NUEVO"))
         self.reiniciar()
-        self.assertEqual(self.reparto(), {"Nuevo": 5})
+        self.assertEqual(self.reparto(), {"NUEVO": 5})
 
     def test_estado_propio_sobrevive(self):
         db.init_db()
         propio = db.crear_estado("Turno confirmado", "#123456")
         db.crear_cliente("A", "1170000001", propio)
         self.reiniciar()
-        self.assertEqual(self.reparto(), {"Turno confirmado": 1})
-        self.assertIn("Turno confirmado", [e.nombre for e in db.listar_estados()])
+        # crear_estado fuerza mayúscula (pedido explícito: "de ahora en más todos los que
+        # cree él" quedan en mayúscula), igual que ya pasa con el nombre del cliente.
+        self.assertEqual(self.reparto(), {"TURNO CONFIRMADO": 1})
+        self.assertIn("TURNO CONFIRMADO", [e.nombre for e in db.listar_estados()])
 
     def test_estado_renombrado_a_mano_sobrevive(self):
         db.init_db()
-        db.actualizar_estado(self.estado_id("Viene"), "Viene a la clínica", "#06b6d4")
-        db.crear_cliente("A", "1170000002", self.estado_id("Viene a la clínica"))
+        db.actualizar_estado(self.estado_id("VIENE"), "Viene a la clínica", "#06b6d4")
+        db.crear_cliente("A", "1170000002", self.estado_id("VIENE A LA CLÍNICA"))
         self.reiniciar()
-        self.assertEqual(self.reparto(), {"Viene a la clínica": 1})
+        self.assertEqual(self.reparto(), {"VIENE A LA CLÍNICA": 1})
 
     def test_base_dejada_por_el_bug_viejo_no_se_mueve(self):
         db.init_db()
@@ -76,10 +78,10 @@ class TestEstadosNoCambianSolos(BaseDB):
         c.execute("UPDATE estados SET orden = 999 WHERE nombre = 'Nuevo'")
         c.commit()
         c.close()
-        db.crear_cliente("A", "1180000001", self.estado_id("Nuevo"))
-        db.crear_cliente("B", "1180000002", self.estado_id("Esperar"))
+        db.crear_cliente("A", "1180000001", self.estado_id("NUEVO"))
+        db.crear_cliente("B", "1180000002", self.estado_id("ESPERAR"))
         self.reiniciar()
-        self.assertEqual(self.reparto(), {"Nuevo": 1, "Esperar": 1})
+        self.assertEqual(self.reparto(), {"NUEVO": 1, "ESPERAR": 1})
 
     def test_esquema_viejo_de_5_estados_se_migra_una_vez(self):
         c = sqlite3.connect(db.DB_PATH)
@@ -97,13 +99,13 @@ class TestEstadosNoCambianSolos(BaseDB):
         c.commit()
         c.close()
         self.reiniciar()
-        self.assertEqual(self.reparto(), {"Viene": 1, "Cliente": 1, "Descartado": 1})
+        self.assertEqual(self.reparto(), {"VIENE": 1, "CLIENTE": 1, "DESCARTADO": 1})
 
     def test_color_personalizado_se_respeta(self):
         db.init_db()
-        db.actualizar_estado(self.estado_id("Esperar"), "Esperar", "#ff00ff")
+        db.actualizar_estado(self.estado_id("ESPERAR"), "ESPERAR", "#ff00ff")
         self.reiniciar()
-        color = next(e.color for e in db.listar_estados() if e.nombre == "Esperar")
+        color = next(e.color for e in db.listar_estados() if e.nombre == "ESPERAR")
         self.assertEqual(color, "#ff00ff")
 
     def test_cantidad_de_estados_no_crece(self):
@@ -115,17 +117,17 @@ class TestVersionVieja(BaseDB):
     def test_app_vieja_no_migra_una_base_de_una_version_mas_nueva(self):
         version.__version__ = "9.9.9"
         db.init_db()
-        db.crear_cliente("A", "1190000001", self.estado_id("Nuevo"))
+        db.crear_cliente("A", "1190000001", self.estado_id("NUEVO"))
         version.__version__ = "1.0.0"
         db.init_db()
         self.assertEqual(db.version_vieja_detectada(), "9.9.9")
-        self.assertEqual(self.reparto(), {"Nuevo": 1})
+        self.assertEqual(self.reparto(), {"NUEVO": 1})
 
 
 class TestCopiaDeSeguridad(BaseDB):
     def test_se_crea_copia_al_arrancar_y_se_poda(self):
         db.init_db()
-        db.crear_cliente("A", "1100000001", self.estado_id("Nuevo"))
+        db.crear_cliente("A", "1100000001", self.estado_id("NUEVO"))
         for _ in range(3):
             db.init_db()
         copias = list(db.BACKUPS_LOCALES_DIR.glob("clientes_*.db"))
@@ -142,3 +144,56 @@ class TestVersionYTag(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMayusculaEstados(BaseDB):
+    def test_migracion_pasa_todo_a_mayuscula_sin_duplicar(self):
+        db.init_db()
+        c = sqlite3.connect(db.DB_PATH)
+        c.execute("UPDATE estados SET nombre = 'Esperar' WHERE nombre = 'ESPERAR'")
+        c.execute("INSERT INTO estados (nombre, color, orden) VALUES ('turno confirmado', '#123', 99)")
+        c.commit()
+        c.close()
+        nuevo = self.estado_id("NUEVO")
+        db.crear_cliente("A", "1", nuevo)
+        db.init_db()
+        nombres = [e.nombre for e in db.listar_estados()]
+        self.assertIn("ESPERAR", nombres)
+        self.assertNotIn("Esperar", nombres)
+        self.assertIn("TURNO CONFIRMADO", nombres)
+        # sin duplicados: cada nombre aparece una sola vez
+        self.assertEqual(len(nombres), len(set(nombres)))
+
+    def test_migracion_fusiona_si_ya_existia_la_version_en_mayuscula(self):
+        db.init_db()
+        c = sqlite3.connect(db.DB_PATH)
+        # simula el caso raro: "ok" y "OK" coexistiendo (no debería romper el UNIQUE)
+        cur = c.execute("INSERT INTO estados (nombre, color, orden) VALUES ('ok', '#111', 50)")
+        id_minuscula = cur.lastrowid
+        id_mayuscula = c.execute("SELECT id FROM estados WHERE nombre = 'OK'").fetchone()[0]
+        c.execute(
+            "INSERT INTO clientes (nombre, contacto, estado_id, fecha_actualizacion, fecha_alta) "
+            "VALUES ('X', '1', ?, '2026-01-01', '2026-01-01')",
+            (id_minuscula,),
+        )
+        c.commit()
+        c.close()
+        db.init_db()
+        clientes = db.listar_clientes()
+        self.assertEqual(len(clientes), 1)
+        self.assertEqual(clientes[0].estado_id, id_mayuscula)
+        nombres = [e.nombre for e in db.listar_estados()]
+        self.assertEqual(nombres.count("OK"), 1)
+
+    def test_crear_estado_fuerza_mayuscula(self):
+        db.init_db()
+        eid = db.crear_estado("con minuscula", "#000000")
+        estado = next(e for e in db.listar_estados() if e.id == eid)
+        self.assertEqual(estado.nombre, "CON MINUSCULA")
+
+    def test_actualizar_estado_fuerza_mayuscula(self):
+        db.init_db()
+        eid = self.estado_id("NUEVO")
+        db.actualizar_estado(eid, "renombrado en minuscula", "#000000")
+        estado = next(e for e in db.listar_estados() if e.id == eid)
+        self.assertEqual(estado.nombre, "RENOMBRADO EN MINUSCULA")

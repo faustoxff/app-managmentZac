@@ -59,45 +59,47 @@ def restaurar_backup_local(nombre_archivo: str) -> None:
 
 
 ESTADOS_SEED = [
-    ("Nuevo", "#8b5cf6"),
-    ("Descartado", "#6b7280"),
+    ("NUEVO", "#8b5cf6"),
+    ("DESCARTADO", "#6b7280"),
     ("OK", "#16a34a"),
-    ("Cliente", "#2563eb"),
-    ("Viene", "#06b6d4"),
-    ("Esperar", "#f59e0b"),
-    ("No contesta", "#ef4444"),
+    ("CLIENTE", "#2563eb"),
+    ("VIENE", "#06b6d4"),
+    ("ESPERAR", "#f59e0b"),
+    ("NO CONTESTA", "#ef4444"),
 ]
 ESTADOS_SEED_NOMBRES = {nombre for nombre, _ in ESTADOS_SEED}
 
 # Paleta anterior de ESTADOS_SEED (algunos tonos quedaban muy parecidos entre sí, en especial
-# los cálidos de "Viene"/"Esperar"/"No contesta"). Se usa solo para detectar, en la migración,
+# los cálidos de "VIENE"/"ESPERAR"/"NO CONTESTA"). Se usa solo para detectar, en la migración,
 # qué instalaciones todavía tienen el color por defecto viejo sin tocar y así poder
 # actualizarlas al nuevo sin pisar un color que el usuario haya elegido a mano.
 _ESTADOS_SEED_COLOR_VIEJO = {
-    "Nuevo": "#8b5cf6",
-    "Descartado": "#9ca3af",
+    "NUEVO": "#8b5cf6",
+    "DESCARTADO": "#9ca3af",
     "OK": "#22c55e",
-    "Cliente": "#3b82f6",
-    "Viene": "#eab308",
-    "Esperar": "#f97316",
-    "No contesta": "#ef4444",
+    "CLIENTE": "#3b82f6",
+    "VIENE": "#eab308",
+    "ESPERAR": "#f97316",
+    "NO CONTESTA": "#ef4444",
 }
 
 # Mapea nombres del esquema VIEJO de estados (5 estados) a su equivalente en el esquema
 # actual. Se usa una sola vez por estado viejo encontrado, en _migrar_estados_a_nuevo_esquema:
 # cualquier estado que el usuario haya creado o renombrado a mano (no está acá) NO se toca.
+# Las CLAVES quedan tal cual las escribía el esquema viejo (antes de que todo pasara a
+# mayúscula): son las que hay que encontrar en bases viejas sin tocar, así que no se tocan.
 #
 # OJO: "Nuevo" NO va acá. El esquema viejo tenía un "Nuevo" con otro significado, pero el
-# esquema actual TAMBIÉN tiene un estado llamado "Nuevo" (ESTADOS_SEED, el default para
+# esquema actual TAMBIÉN tiene un estado llamado "NUEVO" (ESTADOS_SEED, el default para
 # clientes importados). Si "Nuevo" estuviera en este mapeo, la migración de la fase 1 no
-# puede distinguir el "Nuevo" viejo del "Nuevo" actual: en cada arranque encontraría la fila
-# "Nuevo" legítima, movería a esos clientes a "Esperar" y borraría la fila. Eso es lo que
+# puede distinguir el "Nuevo" viejo del "NUEVO" actual: en cada arranque encontraría la fila
+# "NUEVO" legítima, movería a esos clientes a "ESPERAR" y borraría la fila. Eso es lo que
 # causaba que los clientes en "Nuevo" quedaran reseteados a "Esperar" en cada reinicio.
 MAPEO_ESTADOS_MIGRACION = {
-    "Contactado": "Viene",
-    "En negociación": "Esperar",
-    "Cerrado": "Cliente",
-    "Perdido": "Descartado",
+    "Contactado": "VIENE",
+    "En negociación": "ESPERAR",
+    "Cerrado": "CLIENTE",
+    "Perdido": "DESCARTADO",
 }
 
 
@@ -250,6 +252,29 @@ def init_db() -> None:
         _log_conteo_por_estado(conn, "despues de migrar")
 
 
+def _mayusculizar_estados(conn: sqlite3.Connection) -> None:
+    """Pasa a MAYÚSCULA el nombre de TODOS los estados que queden (los ESTADOS_SEED por
+    defecto y cualquiera que el usuario haya creado/renombrado a mano) — pedido explícito del
+    usuario. Idempotente: en una base ya toda en mayúscula no encuentra nada para cambiar. Si
+    por algún motivo raro ya existiera un estado con ese mismo nombre en mayúscula (ej.
+    "OK" y "ok" a la vez), se fusionan los clientes ahí en vez de romper el UNIQUE de la
+    columna nombre."""
+    for row in conn.execute("SELECT id, nombre FROM estados").fetchall():
+        nombre_mayus = (row["nombre"] or "").upper()
+        if nombre_mayus == row["nombre"]:
+            continue
+        duplicado = conn.execute(
+            "SELECT id FROM estados WHERE nombre = ? AND id != ?", (nombre_mayus, row["id"])
+        ).fetchone()
+        if duplicado:
+            conn.execute(
+                "UPDATE clientes SET estado_id = ? WHERE estado_id = ?", (duplicado["id"], row["id"])
+            )
+            conn.execute("DELETE FROM estados WHERE id = ?", (row["id"],))
+        else:
+            conn.execute("UPDATE estados SET nombre = ? WHERE id = ?", (nombre_mayus, row["id"]))
+
+
 def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
     """Crea los ESTADOS_SEED actuales si faltan, y migra los clientes que estaban en un
     estado del esquema VIEJO conocido (MAPEO_ESTADOS_MIGRACION). Es idempotente: en una DB ya
@@ -298,6 +323,8 @@ def _migrar_estados_a_nuevo_esquema(conn: sqlite3.Connection) -> None:
                 f"'{nombre_nuevo}'"
             )
         conn.execute("DELETE FROM estados WHERE id = ?", (id_viejo,))
+
+    _mayusculizar_estados(conn)
 
     # Fase 2: asegura que existan (y con el orden correcto) todos los ESTADOS_SEED actuales.
     existentes_filas = {
@@ -354,6 +381,7 @@ def listar_estados() -> list[Estado]:
 
 
 def crear_estado(nombre: str, color: str = "#808080") -> int:
+    nombre = nombre.strip().upper()
     with get_conn() as conn:
         orden = conn.execute("SELECT COALESCE(MAX(orden), -1) + 1 FROM estados").fetchone()[0]
         cur = conn.execute(
@@ -363,6 +391,7 @@ def crear_estado(nombre: str, color: str = "#808080") -> int:
 
 
 def actualizar_estado(estado_id: int, nombre: str, color: str) -> None:
+    nombre = nombre.strip().upper()
     with get_conn() as conn:
         conn.execute(
             "UPDATE estados SET nombre = ?, color = ? WHERE id = ?", (nombre, color, estado_id)

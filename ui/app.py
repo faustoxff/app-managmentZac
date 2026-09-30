@@ -256,14 +256,19 @@ class App(tk.Tk):
             "nombre": "NOMBRE",
             "contacto": "CONTACTO",
             "estado": "ESTADO",
-            "fecha_alta": "FECHA DE ALTA",
-            "fecha": "ÚLTIMA ACTUALIZACIÓN",
+            "fecha_alta": "ALTA",
+            "fecha": "MODIFICACIÓN",
             "recomendado_por": "REC.",
             "recordatorio": "RECORDATORIO",
             "notas": "NOTAS",
         }
+        # Clic en un encabezado ordena la tabla por esa columna (alfabético para texto, por
+        # fecha para las de fecha); un segundo clic en el mismo invierte el orden. Pisa el
+        # agrupado automático por estado mientras esté activo (ver _refrescar).
+        self._orden_columna: str | None = None
+        self._orden_ascendente = True
         for c, label in self._encabezados_columna.items():
-            self.tree.heading(c, text=label, anchor="w")
+            self.tree.heading(c, text=label, anchor="w", command=lambda col=c: self._ordenar_por_columna(col))
             self.tree.column(c, width=self.ANCHOS_COLUMNA[c][0], anchor="w", stretch=False)
 
         vsb = ttk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
@@ -358,6 +363,8 @@ class App(tk.Tk):
             texto=texto_efectivo,
             agrupar_por_estado=self._hay_filtro_activo(),
         )
+        if self._orden_columna:
+            clientes = self._ordenar_clientes(clientes, self._orden_columna, self._orden_ascendente)
         self.tree.delete(*self.tree.get_children())
         for c in clientes:
             tag = f"estado_{c.estado_id}"
@@ -585,6 +592,38 @@ class App(tk.Tk):
 
     def _actualizar_boton_limpiar_filtro(self):
         self.limpiar_filtro_btn.config(state="normal" if self._hay_filtro_popup_activo() else "disabled")
+
+    # ---------- ordenar al clickear un encabezado ----------
+
+    _ATRIBUTO_POR_COLUMNA = {
+        "nombre": "nombre",
+        "contacto": "contacto",
+        "estado": "estado_nombre",
+        "fecha_alta": "fecha_alta",
+        "fecha": "fecha_actualizacion",
+        "recomendado_por": "recomendado_por",
+        "recordatorio": "fecha_recordatorio",
+        "notas": "notas",
+    }
+
+    def _ordenar_clientes(self, clientes: list, columna: str, ascendente: bool) -> list:
+        atributo = self._ATRIBUTO_POR_COLUMNA[columna]
+        return sorted(clientes, key=lambda c: (getattr(c, atributo) or "").lower(), reverse=not ascendente)
+
+    def _ordenar_por_columna(self, columna: str):
+        if self._orden_columna == columna:
+            self._orden_ascendente = not self._orden_ascendente
+        else:
+            self._orden_columna = columna
+            self._orden_ascendente = True
+        self._actualizar_flechas_orden()
+        self._refrescar()
+
+    def _actualizar_flechas_orden(self):
+        flecha = " ▲" if self._orden_ascendente else " ▼"
+        for col, base in self._encabezados_columna.items():
+            texto = base + flecha if col == self._orden_columna else base
+            self.tree.heading(col, text=texto)
 
     def _abrir_estados(self):
         EstadosPopup(self, on_change=self._refrescar)

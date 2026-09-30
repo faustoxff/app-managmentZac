@@ -15,7 +15,7 @@ class TestRecordatorios(BaseDB):
     def setUp(self):
         super().setUp()
         db.init_db()
-        self.nuevo = self.estado_id("Nuevo")
+        self.nuevo = self.estado_id("NUEVO")
 
     def test_crear_con_recordatorio_para_hoy(self):
         hoy = date.today().isoformat()
@@ -53,7 +53,7 @@ class TestFiltroConRecordatorio(BaseDB):
         db.init_db()
         from datetime import date
 
-        nuevo = self.estado_id("Nuevo")
+        nuevo = self.estado_id("NUEVO")
         db.crear_cliente("CON TURNO", "1", nuevo, "", "", date.today().isoformat())
         db.crear_cliente("SIN TURNO", "2", nuevo, "", "")
 

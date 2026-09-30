@@ -15,8 +15,8 @@ class TestFiltros(BaseDB):
     def setUp(self):
         super().setUp()
         db.init_db()
-        nuevo = self.estado_id("Nuevo")
-        esperar = self.estado_id("Esperar")
+        nuevo = self.estado_id("NUEVO")
+        esperar = self.estado_id("ESPERAR")
         datos = [
             ("A UNO", "1", nuevo, "ARA", "2026-09-22T10:00:00"),
             ("B DOS", "2", esperar, "ARA", "2026-09-24T10:00:00"),
@@ -55,7 +55,7 @@ class TestFiltros(BaseDB):
 
     def test_filtros_se_combinan(self):
         self.assertEqual(
-            self.nombres(recomendado_por="ARA", estado_id=self.estado_id("Esperar")), ["B DOS"]
+            self.nombres(recomendado_por="ARA", estado_id=self.estado_id("ESPERAR")), ["B DOS"]
         )
         self.assertEqual(self.nombres(recomendado_por="ARA", alta_desde="2026-09-24"), ["B DOS"])
 
@@ -74,16 +74,16 @@ class TestAgruparPorEstado(BaseDB):
 
     def test_sin_agrupar_respeta_orden_por_fecha(self):
         E = {e.nombre: e.id for e in db.listar_estados()}
-        db.crear_cliente("A", "1", E["Descartado"])
-        db.crear_cliente("B", "2", E["Esperar"])
+        db.crear_cliente("A", "1", E["DESCARTADO"])
+        db.crear_cliente("B", "2", E["ESPERAR"])
         nombres = [c.nombre for c in db.listar_clientes()]
         self.assertEqual(nombres, ["B", "A"])  # más reciente primero
 
     def test_agrupado_junta_mismo_estado_aunque_se_mezclen_las_fechas(self):
         E = {e.nombre: e.id for e in db.listar_estados()}
-        db.crear_cliente("A1", "1", E["Esperar"])
-        db.crear_cliente("A2", "2", E["Descartado"])
-        db.crear_cliente("A3", "3", E["Esperar"])
+        db.crear_cliente("A1", "1", E["ESPERAR"])
+        db.crear_cliente("A2", "2", E["DESCARTADO"])
+        db.crear_cliente("A3", "3", E["ESPERAR"])
         estados = [c.estado_nombre for c in db.listar_clientes(agrupar_por_estado=True)]
-        # "Descartado" va antes que "Esperar" según ESTADOS_SEED (su índice de orden es menor).
-        self.assertEqual(estados, ["Descartado", "Esperar", "Esperar"])
+        # "DESCARTADO" va antes que "ESPERAR" según ESTADOS_SEED (su índice de orden es menor).
+        self.assertEqual(estados, ["DESCARTADO", "ESPERAR", "ESPERAR"])

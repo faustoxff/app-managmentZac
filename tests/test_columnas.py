@@ -30,7 +30,7 @@ class TestColumnasAutoajuste(BaseDB):
         return App()
 
     def test_columna_notas_crece_con_nota_larga_pero_no_sin_limite(self):
-        nuevo = self.estado_id("Nuevo")
+        nuevo = self.estado_id("NUEVO")
         db.crear_cliente("A", "1", nuevo, "N" * 500, "")
         app = self._app()
         try:
@@ -42,7 +42,7 @@ class TestColumnasAutoajuste(BaseDB):
             app.destroy()
 
     def test_columna_corta_no_queda_mas_angosta_que_el_minimo(self):
-        nuevo = self.estado_id("Nuevo")
+        nuevo = self.estado_id("NUEVO")
         db.crear_cliente("A", "1", nuevo, "ok", "")
         app = self._app()
         try:
@@ -76,7 +76,7 @@ class TestBotonLimpiarFiltroYSeleccion(BaseDB):
     def setUp(self):
         super().setUp()
         db.init_db()
-        nuevo = self.estado_id("Nuevo")
+        nuevo = self.estado_id("NUEVO")
         db.crear_cliente("A", "1", nuevo)
         db.crear_cliente("B", "2", nuevo)
         db.crear_cliente("C", "3", nuevo)
@@ -134,3 +134,59 @@ class TestBotonLimpiarFiltroYSeleccion(BaseDB):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOrdenarPorEncabezado(BaseDB):
+    def setUp(self):
+        super().setUp()
+        db.init_db()
+        nuevo = self.estado_id("NUEVO")
+        db.crear_cliente("ZAPATA", "1", nuevo, "", "MARA")
+        db.crear_cliente("ACOSTA", "2", nuevo, "", "ARA")
+        db.crear_cliente("MEDINA", "3", nuevo, "", "ARA")
+        db.crear_cliente("BAEZ", "4", nuevo, "", "")
+
+    def _app(self):
+        import tkinter as tk
+
+        if not hasattr(self, "_root_probado"):
+            try:
+                tk.Tk().destroy()
+            except tk.TclError:
+                self.skipTest("sin display disponible para probar Tkinter")
+            self._root_probado = True
+        from ui.app import App
+
+        return App()
+
+    def _nombres(self, app):
+        return [app.tree.item(i)["values"][0] for i in app.tree.get_children()]
+
+    def test_clic_en_nombre_ordena_alfabetico_y_el_segundo_invierte(self):
+        app = self._app()
+        try:
+            app._ordenar_por_columna("nombre")
+            self.assertEqual(self._nombres(app), ["ACOSTA", "BAEZ", "MEDINA", "ZAPATA"])
+            self.assertEqual(app.tree.heading("nombre")["text"], "NOMBRE ▲")
+            app._ordenar_por_columna("nombre")
+            self.assertEqual(self._nombres(app), ["ZAPATA", "MEDINA", "BAEZ", "ACOSTA"])
+            self.assertEqual(app.tree.heading("nombre")["text"], "NOMBRE ▼")
+        finally:
+            app.destroy()
+
+    def test_clic_en_recomendado_agrupa_por_ese_valor(self):
+        app = self._app()
+        try:
+            app._ordenar_por_columna("recomendado_por")
+            recs = [app.tree.item(i)["values"][5] for i in app.tree.get_children()]
+            self.assertEqual(recs, sorted(recs))
+        finally:
+            app.destroy()
+
+    def test_encabezados_alta_y_modificacion(self):
+        app = self._app()
+        try:
+            self.assertEqual(app.tree.heading("fecha_alta")["text"], "ALTA")
+            self.assertEqual(app.tree.heading("fecha")["text"], "MODIFICACIÓN")
+        finally:
+            app.destroy()

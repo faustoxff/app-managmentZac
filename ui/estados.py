@@ -72,6 +72,14 @@ class EstadosPopup(tk.Toplevel):
 
         tk.Label(dialogo, text="Nombre").grid(row=0, column=0, padx=10, pady=8, sticky="w")
         nombre_var = tk.StringVar(value=estado.nombre if estado else "")
+
+        def _forzar_mayusculas(*_args):
+            texto = nombre_var.get()
+            mayus = texto.upper()
+            if texto != mayus:
+                nombre_var.set(mayus)
+
+        nombre_var.trace_add("write", _forzar_mayusculas)
         tk.Entry(dialogo, textvariable=nombre_var, width=25).grid(row=0, column=1, padx=10, pady=8)
 
         color_var = tk.StringVar(value=estado.color if estado else "#808080")
