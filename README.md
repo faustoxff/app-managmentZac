@@ -132,6 +132,12 @@ directamente.
 - **Validación de duplicados**: al cargar un cliente (a mano, o vía Excel/foto), si ya existe
   uno con el mismo teléfono (normalizado) o el mismo nombre (sin importar mayúsculas/tildes),
   se avisa antes de cargar — sin bloquear, se puede ver el existente o cargar igual.
+- **Aviso de coincidencias mientras se carga**: al dar de alta un cliente nuevo, una ventanita
+  al costado del formulario va mostrando, a medida que se tipea, los clientes que ya están
+  cargados y se parecen. Busca por teléfono (exacto) y por nombre (contenido: tipeando "JOSE"
+  ya avisa que existe "JOSE GARCIA"). No frena la escritura ni se lleva el foco del campo, y
+  doble clic en una fila abre el cliente existente. Igual al completar el nombre, sigue
+  apareciendo el aviso modal de confirmación al apretar Guardar.
 - **Importar Excel** (`.xlsx`): deja mapear qué columna del archivo corresponde a cada campo
   (nombre, contacto, estado, notas), y recuerda el último mapeo usado para no repetirlo con
   archivos del mismo formato. Al final muestra cuántos se cargaron OK, cuántos son posibles

@@ -606,6 +606,81 @@ def buscar_duplicados(nombre: str, contacto: str) -> list[Cliente]:
     return []
 
 
+# Mínimo de letras para que el match PARCIAL por nombre sirva de algo: con 1 o 2 letras el
+# "contiene" matchearía casi toda la base y el panel lateral se llenaría de falsos positivos
+# (con solo "A" casi todos los clientes de la lista la aparecerían).
+MIN_LETRAS_PARA_MATCH_PARCIAL = 3
+
+
+def _escapar_like(texto: str) -> str:
+    """Escapa los comodines de LIKE para que un nombre con % o _ (p. ej. "MARIA _ANA") se
+    busque literal en vez de interpretarse como comodín."""
+    return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def buscar_posibles_duplicados(
+    nombre: str, contacto: str, excluir_id: Optional[int] = None
+) -> list[Cliente]:
+    """Búsqueda de coincidencias para el aviso EN VIVO del alta de clientes.
+
+    Deliberadamente distinta de buscar_duplicados(): esta corre en cada pulsación de tecla,
+    así que mezcla dos criterios de distinto peso:
+
+    - Teléfono: EXACTO sobre el campo indexado `contacto_normalizado`, igual que el chequeo
+      de siempre. Es el único match concluyente (mismo teléfono = casi seguro la misma
+      persona) y va primero en el resultado.
+    - Nombre: POR CONTENIDO. Tipeando "JOSE" ya avisa que existe "JOSE GARCIA", que es
+      justo lo que un match exacto no puede avisar porque todavía falta el resto del nombre.
+      Se exige al menos MIN_LETRAS_PARA_MATCH_PARCIAL letras para que el substring no sea
+      inútil de demasiado amplio.
+
+    Se comparan sobre el `nombre` ya normalizado que se guarda en la DB (init_db normaliza
+    todos los nombres en cada arranque), así que alcanza un LIKE de SQL — sin el escaneo
+    entero de tabla + normalización en Python que hace buscar_duplicados(). Los tildes ya
+    no son problema: "José" se guardó como "JOSE".
+
+    `excluir_id` saca un cliente del resultado (para no marcar al propio registro como
+    coincidencia de sí mismo si se reutiliza para editar).
+    """
+    contacto_norm = normalizar_telefono(contacto)
+    # El nombre se guarda normalizado (sin tildes, en mayúsculas), pero un LIKE de SQL es
+    # case-insensitive solo para ASCII: normalizamos igual para no depender de eso.
+    nombre_norm = normalizar_nombre(nombre)
+
+    condiciones: list[str] = []
+    params: list = []
+    if contacto_norm:
+        condiciones.append("c.contacto_normalizado = ?")
+        params.append(contacto_norm)
+    if len(nombre_norm) >= MIN_LETRAS_PARA_MATCH_PARCIAL:
+        condiciones.append("c.nombre LIKE ? ESCAPE '\\'")
+        params.append(f"%{_escapar_like(nombre_norm)}%")
+    if not condiciones:
+        # Con medio campo vacío no hay nada que comparar: se sale sin tocar la DB (se llama
+        # en cada tecla, no tiene sentido abrir conexión para no devolver nada).
+        return []
+
+    query = (
+        "SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color "
+        "FROM clientes c JOIN estados e ON e.id = c.estado_id "
+        f"WHERE ({' OR '.join(condiciones)})"
+    )
+    if excluir_id is not None:
+        query += " AND c.id != ?"
+        params.append(excluir_id)
+    if contacto_norm:
+        # Primero los que coinciden por teléfono (conclusión firme), después los de nombre.
+        # El "0"/"1" explícito evita depender de cómo SQLite interprete un booleano.
+        query += " ORDER BY (c.contacto_normalizado = ?) DESC, e.orden, c.nombre"
+        params.append(contacto_norm)
+    else:
+        query += " ORDER BY e.orden, c.nombre"
+
+    with get_conn() as conn:
+        rows = conn.execute(query, params).fetchall()
+        return [_row_to_cliente(r) for r in rows]
+
+
 def cambiar_estado_cliente(cliente_id: int, estado_id: int) -> None:
     with get_conn() as conn:
         conn.execute(

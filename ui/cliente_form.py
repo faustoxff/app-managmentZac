@@ -6,6 +6,12 @@ import db
 from models import Cliente
 from ui.calendario_popup import CalendarioPopup
 from ui.duplicado_popup import DuplicadoPopup
+from ui.panel_duplicados import PanelDuplicados
+
+# Espera antes de buscar coincidencias mientras se tipea. Mismo criterio que el debounce de
+# la búsqueda rápida de la ventana principal (300ms): evita consultar la base en cada tecla
+# sin dejar el panel con atraso perceptible.
+DEBOUNCE_BUSQUEDA_MS = 300
 
 
 class ClienteForm(tk.Toplevel):
@@ -67,6 +73,29 @@ class ClienteForm(tk.Toplevel):
             side="left", padx=(4, 0)
         )
         self._refrescar_label_recordatorio()
+
+        self.contacto_entry = contacto_entry  # atributo: _restituir_foco lo necesita
+
+        # Panel lateral de coincidencias: solo al DAR DE ALTA. Al editar, el cliente que se
+        # está editando coincide consigo mismo y el panel llenaría de falsos positivos; el
+        # chequeo de duplicados al guardar ya cubre ese caso (ver _guardar).
+        self._panel_duplicados: PanelDuplicados | None = None
+        self._debounce_busqueda_id = None
+        if cliente is None:
+            for var in (self.nombre_var, self.contacto_var):
+                var.trace_add("write", self._programar_busqueda_duplicados)
+            # Se recuerda en qué campo está escribiendo para devolverle el foco si el panel se
+            # lo queda (ver _restituir_foco).
+            self._ultimo_entry_focado = None
+            self._reafirmar_foco_id = None
+            for entry in (self.nombre_entry, contacto_entry):
+                entry.bind(
+                    "<FocusIn>", lambda _e, w=entry: setattr(self, "_ultimo_entry_focado", w)
+                )
+            # El panel es hijo de este Toplevel: si el formulario se cierra por la X (que no
+            # pasa por _guardar ni por _limpiar_para_siguiente), el panel se va con él en vez
+            # de quedar flotando sin formulario al que pertenecer.
+            self.protocol("WM_DELETE_WINDOW", self.destroy)
 
         # Enter guarda directo desde cualquiera de estos campos (no en Notas, ahí Enter tiene
         # que seguir insertando un salto de línea como siempre).
@@ -132,6 +161,94 @@ class ClienteForm(tk.Toplevel):
         if texto != mayus:
             self.nombre_var.set(mayus)
 
+    # ---------- panel lateral de coincidencias ----------
+
+    def _programar_busqueda_duplicados(self, *_args):
+        """Debounce: cada tecla cancela la búsqueda pendiente y agenda una nueva, así nunca
+        se consulta la base en cada pulsación."""
+        self._cancelar_busqueda_duplicados()
+        if self.cliente is not None:
+            return
+        self._debounce_busqueda_id = self.after(
+            DEBOUNCE_BUSQUEDA_MS, self._buscar_duplicados_vivo
+        )
+
+    def _cancelar_busqueda_duplicados(self):
+        # getattr porque destroy() puede correr antes de que __init__ llegue a armar el
+        # debounce (ej. el caso de "no hay estados configurados", que destruye la ventana
+        # apenas abre).
+        if getattr(self, "_debounce_busqueda_id", None) is not None:
+            try:
+                self.after_cancel(self._debounce_busqueda_id)
+            except (tk.TclError, ValueError):
+                pass  # la ventana ya se cerró; no hay nada que cancelar
+            self._debounce_busqueda_id = None
+
+    def _buscar_duplicados_vivo(self):
+        self._debounce_busqueda_id = None
+        if self.cliente is not None:
+            return
+        nombre = self.nombre_var.get().strip()
+        contacto = self.contacto_var.get().strip()
+        if not nombre and not contacto:
+            # Con los dos campos vacíos no hay nada que comparar (y la función ni siquiera
+            # tocaría la DB): se oculta el panel en vez de dejarlo mostrando la consulta vieja.
+            if self._panel_duplicados is not None:
+                self._panel_duplicados.ocultar()
+            return
+        coincidencias = db.buscar_posibles_duplicados(nombre, contacto)
+        if not coincidencias:
+            if self._panel_duplicados is not None:
+                self._panel_duplicados.ocultar()
+            return
+        if self._panel_duplicados is None:
+            self._panel_duplicados = PanelDuplicados(self, on_ver_existente=self._ver_existente)
+        self._panel_duplicados.actualizar(coincidencias, nombre, contacto)
+        self._restituir_foco()
+        self._reafirmar_foco_id = self.after(60, self._reafirmar_foco)
+
+    def _restituir_foco(self):
+        """Al aparecer, la Toplevel puede robarle el foco al Entry (según el window manager),
+        y como el panel se repinta en cada tecla el usuario se quedaría tipeando en un campo
+        muerto. Se lo devolvemos al campo en el que estaba escribiendo.
+
+        Hace falta focus_force() y no focus_set(): con focus_set() el foco sigue despertado en
+        la toplevel del panel, porque el window manager considera que ésa es la ventana activa
+        (probado sobre display real: focus_get() seguía devolviendo el panel)."""
+        if self._panel_duplicados is None or not self._panel_duplicados.winfo_ismapped():
+            return
+        self._forzar_foco_en_entries()
+
+    def _forzar_foco_en_entries(self):
+        actual = self.focus_get()
+        if actual is self.nombre_entry or actual is self.contacto_entry:
+            return  # el foco ya está donde tiene que estar
+        (getattr(self, "_ultimo_entry_focado", None) or self.nombre_entry).focus_force()
+
+    def _reafirmar_foco(self):
+        """El window manager le asigna el foco a la ventana nueva ASINCRÓNICAMENTE, después de
+        que termina el callback que la mapeó: reaffirmarlo dentro del mismo callback no
+        alcanza (probado sobre display real — el foco volvía al panel en el siguiente ciclo de
+        eventos). Se reintenta un instante después, con update_idletasks de por medio para que
+        el panel ya tenga geometría y no se robe el foco después."""
+        try:
+            if not self.winfo_exists() or self._panel_duplicados is None:
+                return
+            if not self._panel_duplicados.winfo_ismapped():
+                return
+            self.update_idletasks()
+            self._forzar_foco_en_entries()
+        except tk.TclError:
+            pass  # la ventana se cerró mientras tanto
+
+    def _cerrar_panel_duplicados(self):
+        """Se usa al guardar o al cancelar: el panel no debe quedar flotando al lado de un
+        formulario que ya limpió sus campos."""
+        self._cancelar_busqueda_duplicados()
+        if getattr(self, "_panel_duplicados", None) is not None:
+            self._panel_duplicados.destroy()
+            self._panel_duplicados = None
+
     def _guardar(self):
         nombre = self.nombre_var.get().strip()
         if not nombre:
@@ -174,7 +291,29 @@ class ClienteForm(tk.Toplevel):
         # y volver a abrir "Nuevo cliente" por cada uno es más lento que solo seguir tipeando.
         self._limpiar_para_siguiente(nombre)
 
+    def destroy(self):
+        # El after() de reafirmación del foco no debe sobrevivir a la ventana: dispararía
+        # contra un Toplevel destruido.
+        if getattr(self, "_reafirmar_foco_id", None) is not None:
+            try:
+                self.after_cancel(self._reafirmar_foco_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._reafirmar_foco_id = None
+        # Override para que todos los caminos de salida (X, guardar, cancelar, ver
+        # existente) se lleven el panel y el debounce pendiente: si el after() sobrevive al
+        # Toplevel, dispara contra una ventana destruida y revienta en el hilo de Tkinter.
+        self._cancelar_busqueda_duplicados()
+        if getattr(self, "_panel_duplicados", None) is not None:
+            self._panel_duplicados.destroy()
+            self._panel_duplicados = None
+        super().destroy()
+
     def _limpiar_para_siguiente(self, nombre_guardado: str):
+        # El panel se cierra explícitamente y no se espera al debounce: los traces de los
+        # StringVar de abajo van a disparar una búsqueda con los campos recién vacíos, pero
+        # quedaría mostrando el cliente recién guardado hasta que corra.
+        self._cerrar_panel_duplicados()
         self.nombre_var.set("")
         self.contacto_var.set("")
         self.recomendado_var.set("")
@@ -185,5 +324,6 @@ class ClienteForm(tk.Toplevel):
         self.nombre_entry.focus_set()
 
     def _ver_existente(self, cliente_existente: Cliente):
+        self._cerrar_panel_duplicados()
         self.destroy()
         ClienteForm(self.master, on_saved=self.on_saved, cliente=cliente_existente)
