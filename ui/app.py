@@ -735,7 +735,12 @@ class App(tk.Tk):
         """Abre el popup de importación desde Z2. El popup lee Z2 y escribe en
         un hilo aparte; al terminar recarga la lista para que los clientes nuevos
         aparezcan sin tener que cerrar y abrir la app."""
-        abrir_importar_z2(self, al_terminar=self._refrescar)
+        abrir_importar_z2(self, al_terminar=self._al_terminar_importacion_z2)
+
+    def _al_terminar_importacion_z2(self):
+        self._refrescar()
+        if db.listar_clientes(origen="z2"):
+            self._abrir_importados_z2()
 
     def _importar_excel(self):
         try:
