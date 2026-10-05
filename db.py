@@ -248,6 +248,16 @@ def init_db() -> None:
                 "INSERT OR REPLACE INTO meta (clave, valor) VALUES ('ultima_version', ?)",
                 (version.__version__,),
             )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS z2_casos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                apellido TEXT, nombre TEXT, telefono TEXT, recomendado_por TEXT,
+                estado_planilla TEXT, categoria TEXT, fecha_accidente TEXT, art TEXT, dni TEXT,
+                sincronizado_en TEXT
+            )
+            """
+        )
         _log_conteo_por_estado(conn, "antes de migrar")
         if _version_vieja_detectada is None:
             _migrar_estados_a_nuevo_esquema(conn)
@@ -440,6 +450,50 @@ def _row_to_cliente(r: sqlite3.Row) -> Cliente:
         estado_nombre=r["estado_nombre"],
         estado_color=r["estado_color"],
     )
+
+
+def reemplazar_z2_casos(casos: list[dict]) -> None:
+    """Reemplaza la copia local de las carpetas de Z2. Toca SOLO la tabla z2_casos: la tabla
+    clientes no se lee ni se modifica acá, así que lo que ya cargó Z1 queda intacto."""
+    ahora = _now_iso()
+    with get_conn() as conn:
+        conn.execute("DELETE FROM z2_casos")
+        conn.executemany(
+            "INSERT INTO z2_casos (apellido, nombre, telefono, recomendado_por, estado_planilla, "
+            "categoria, fecha_accidente, art, dni, sincronizado_en) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    c.get("apellido", ""), c.get("nombre", ""), c.get("telefono", ""),
+                    c.get("recomendado_por", ""), c.get("estado_planilla", ""),
+                    c.get("categoria", ""), c.get("fecha_accidente", ""), c.get("art", ""),
+                    c.get("dni", ""), ahora,
+                )
+                for c in casos
+            ],
+        )
+
+
+def listar_z2_casos() -> tuple[list[dict], str]:
+    """Carpetas de Z2 tal como quedaron en la última sincronización, y cuándo fue."""
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM z2_casos ORDER BY apellido, nombre").fetchall()
+    casos = [
+        {
+            "apellido": r["apellido"] or "",
+            "nombre": r["nombre"] or "",
+            "telefono": r["telefono"] or "",
+            "recomendado_por": r["recomendado_por"] or "",
+            "estado_planilla": r["estado_planilla"] or "",
+            "categoria": r["categoria"] or "",
+            "fecha_accidente": r["fecha_accidente"] or "",
+            "art": r["art"] or "",
+            "dni": r["dni"] or "",
+        }
+        for r in rows
+    ]
+    cuando = rows[0]["sincronizado_en"] if rows else ""
+    return casos, cuando
 
 
 def listar_recomendados() -> list[str]:

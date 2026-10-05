@@ -37,10 +37,7 @@ class PestanaZ2(tk.Toplevel):
         self.transient(master)
 
         self._construir()
-
-        # La lectura va en un hilo: son cientos de filas en internet y congelar la
-        # ventana mientras llegan sería el peor primer gesto de una ventana de consulta.
-        self.after(60, self._cargar)
+        self._cargar()
 
     def _construir(self):
         pad = {"padx": 8, "pady": 5}
@@ -64,7 +61,10 @@ class PestanaZ2(tk.Toplevel):
         )
         self.reco_combo.pack(side="left", padx=(4, 12))
 
-        tk.Button(barra, text="Recargar", command=self._cargar).pack(side="left", padx=4)
+        self.sincronizar_btn = tk.Button(
+            barra, text="Sincronizar con Z2", command=self._sincronizar
+        )
+        self.sincronizar_btn.pack(side="left", padx=4)
         tk.Button(barra, text="Cerrar", command=self.destroy).pack(side="right", padx=8, pady=5)
 
         self.resumen_label = tk.Label(self, anchor="w", fg="gray30", **pad)
@@ -120,18 +120,41 @@ class PestanaZ2(tk.Toplevel):
     # ------------------------------------------------------------------ datos
 
     def _cargar(self):
-        self._cargando = True
-        self.resumen_label.config(text="Leyendo Z2...", fg="gray30")
+        """Lee la copia local (tabla z2_casos). No usa la red: abre al instante y funciona
+        sin internet. Para traer lo último de Z2 está el botón "Sincronizar con Z2"."""
+        casos, cuando = db.listar_z2_casos()
+        self._sincronizado_en = cuando
+        self._pintar(casos)
 
-        def leer():
+    def _sincronizar(self):
+        self.sincronizar_btn.config(state="disabled", text="Sincronizando...")
+        self.resumen_label.config(text="Bajando carpetas de Z2...", fg="gray30")
+
+        def trabajo():
             try:
-                casos = z2_sync.leer_casos_de_z2()
+                z2_sync.sincronizar_copia_local()
                 error = None
             except Exception as exc:  # noqa: BLE001 - se muestra al usuario
-                casos, error = [], str(exc)
-            self.after(0, lambda: self._pintar(casos, error))
+                error = str(exc)
+            try:
+                self.after(0, lambda: self._fin_sincronizar(error))
+            except tk.TclError:
+                pass  # la ventana se cerró mientras se sincronizaba
 
-        threading.Thread(target=leer, daemon=True).start()
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def _fin_sincronizar(self, error):
+        if not self.winfo_exists():
+            return
+        self.sincronizar_btn.config(state="normal", text="Sincronizar con Z2")
+        if error:
+            messagebox.showerror(
+                "No se pudo sincronizar",
+                f"No se pudo bajar las carpetas de Z2:\n\n{error}\n\n"
+                "La copia que ya tenías quedó como estaba.",
+                parent=self,
+            )
+        self._cargar()
 
     def _pintar(self, casos, error=None):
         if not self.winfo_exists():
@@ -208,13 +231,16 @@ class PestanaZ2(tk.Toplevel):
                 text=(
                     "Sin resultados."
                     if self.casos
-                    else "No se pudieron leer las carpetas de Z2."
+                    else "Todavía no hay carpetas. Tocá \"Sincronizar con Z2\"."
                 ),
                 fg="gray30",
             )
         else:
             self.resumen_label.config(
-                text=f"{len(filas)} de {len(self.casos)} carpetas de Z2.",
+                text=f"{len(filas)} de {len(self.casos)} carpetas de Z2"
+                + (f" · última sincronización: {self._sincronizado_en[:16].replace('T', ' ')}"
+                   if getattr(self, "_sincronizado_en", "") else "")
+                + ".",
                 fg="gray30",
             )
 

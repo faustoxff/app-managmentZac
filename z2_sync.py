@@ -340,3 +340,11 @@ def telefonos_en_z2() -> set[str]:
         for caso in leer_casos_de_z2()
         if caso.get("telefono")
     } - {""}
+
+
+def sincronizar_copia_local() -> int:
+    """Baja las carpetas de Z2 y reemplaza la copia local (tabla z2_casos). Si Z2 falla,
+    se levanta el error y la copia anterior queda como estaba. Devuelve cuántas carpetas hay."""
+    casos = leer_casos_de_z2()
+    db.reemplazar_z2_casos(casos)
+    return len(casos)
