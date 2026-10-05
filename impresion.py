@@ -1,8 +1,11 @@
 """Genera una vista HTML simple de clientes y la abre en el navegador para imprimir desde ahí
 (sin dependencias pesadas tipo reportlab: alcanza con el botón "Imprimir" del navegador)."""
 import html
+import os
+import sys
 import tempfile
 import webbrowser
+from pathlib import Path
 from typing import Iterable
 
 from fechas import formatear_fecha
@@ -54,4 +57,14 @@ def imprimir_clientes(clientes: Iterable[Cliente]) -> None:
         f.write(contenido)
         path = f.name
 
-    webbrowser.open(f"file://{path}")
+    _abrir_archivo(Path(path))
+
+
+def _abrir_archivo(path: Path) -> None:
+    # En Windows, "file://C:\\..." no es una URL válida: el navegador no abre nada y la impresión
+    # parece no funcionar. Path.as_uri() arma la forma correcta (file:///C:/...). En el .exe
+    # (sin consola) se usa el programa predeterminado del sistema para .html.
+    if sys.platform == "win32":
+        os.startfile(str(path))
+    else:
+        webbrowser.open(path.as_uri())
