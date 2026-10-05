@@ -238,6 +238,7 @@ class App(tk.Tk):
         # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
         # Importar Excel, Importar desde Z2, Importar por foto, Importar con IA, Exportar Excel.
         tk.Button(bar, text="Exportar Excel", command=self._exportar_excel).pack(side="right", padx=4)
+        tk.Button(bar, text="Pestaña Z2", command=self._abrir_pestana_z2).pack(side="right", padx=4)
         tk.Button(bar, text="Importar con IA", command=self._importar_ia).pack(side="right", padx=4)
         tk.Button(bar, text="Importar por foto", command=self._importar_foto).pack(side="right", padx=4)
         # Trae de Z2 solo nombre, teléfono y recomendado por; lo que coincide con un
