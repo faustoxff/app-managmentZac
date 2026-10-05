@@ -20,7 +20,10 @@ class Cliente:
     fecha_alta: str = ""
     notas: str = ""
     recomendado_por: str = ""
-    origen: str = ""  # "z2" si vino de Z2 (carpeta ART); "" si lo cargó alguien en Z1
+    # Columna "origen" de la base: "z2" si el cliente se trajo de Z2, "" si se cargó en Z1. Se
+    # llama distinto que `origen` (más abajo) porque ése es otro dato: de qué base sale una fila
+    # en el panel de duplicados ("local" o "z2").
+    procedencia: str = ""
     fecha_recordatorio: str = ""  # "AAAA-MM-DD" o "" si no tiene — ver db.listar_recordatorios_de_hoy
     # Texto secondary de una fila que viene de Z2 (ART, estado, prioridad). Vacío en las locales:
     # para un cliente de esta base no hay nada más que mostrar que nombre y teléfono.

@@ -63,7 +63,10 @@ class ResumenImportPopup(tk.Toplevel):
     def _refrescar_tabla(self):
         self.tree.delete(*self.tree.get_children())
         for i, (fila, existentes) in enumerate(self.pendientes):
-            existente_txt = ", ".join(f"{e.nombre} ({e.contacto})" for e in existentes[:2])
+            existente_txt = ", ".join(
+                f"{e.nombre} ({e.contacto})" + (" — tiene carpeta en Z2" if e.origen == "z2" else "")
+                for e in existentes[:2]
+            )
             self.tree.insert("", "end", iid=str(i), values=(fila.nombre, fila.contacto, existente_txt))
         self.resumen_label.config(
             text=(

@@ -1,4 +1,5 @@
 """Acceso a SQLite. Cada operación abre y cierra su propia conexión (context manager)."""
+import re
 import shutil
 import sqlite3
 import unicodedata
@@ -446,7 +447,7 @@ def _row_to_cliente(r: sqlite3.Row) -> Cliente:
         notas=r["notas"] or "",
         recomendado_por=r["recomendado_por"] or "",
         fecha_recordatorio=r["fecha_recordatorio"] or "",
-        origen=r["origen"] or "",
+        procedencia=r["origen"] or "",
         estado_nombre=r["estado_nombre"],
         estado_color=r["estado_color"],
     )
@@ -514,6 +515,44 @@ def buscar_en_z2_casos(nombre: str, contacto: str) -> list[dict]:
                  "telefono": c["telefono"], "detalle": detalle}
             )
     return coincidencias
+
+
+def _telefonos_de(contacto: str) -> set[str]:
+    """Todos los teléfonos de un campo de contacto, sólo dígitos. En Z1 a veces hay más de uno
+    en el mismo campo ("2235271271 / 5304959"); se toma cada número de 6 dígitos o más."""
+    numeros = re.findall(r"\d[\d\s\-().]*\d", contacto or "")
+    return {d for d in (re.sub(r"\D", "", n) for n in numeros) if len(d) >= 6}
+
+
+def comparar_z1_con_z2() -> list[dict]:
+    """Clientes de Z1 que también están en la copia local de Z2, por teléfono o por nombre
+    completo exacto. Sólo lee: no modifica ninguna de las dos tablas. Cada par aparece una vez,
+    con el motivo de la coincidencia ("teléfono", "nombre" o "teléfono y nombre")."""
+    casos = listar_z2_casos()[0]
+    por_telefono: dict[str, list[int]] = {}
+    por_nombre: dict[str, list[int]] = {}
+    for i, c in enumerate(casos):
+        for t in _telefonos_de(c["telefono"]):
+            por_telefono.setdefault(t, []).append(i)
+        nombre = normalizar_nombre(f"{c['apellido']} {c['nombre']}")
+        if nombre:
+            por_nombre.setdefault(nombre, []).append(i)
+
+    resultado = []
+    for cliente in listar_clientes():
+        motivos: dict[int, set[str]] = {}
+        for t in _telefonos_de(cliente.contacto):
+            for i in por_telefono.get(t, []):
+                motivos.setdefault(i, set()).add("teléfono")
+        for i in por_nombre.get(normalizar_nombre(cliente.nombre), []):
+            motivos.setdefault(i, set()).add("nombre")
+        for i, m in motivos.items():
+            resultado.append(
+                {"cliente": cliente, "z2": casos[i],
+                 "motivo": " y ".join(x for x in ("teléfono", "nombre") if x in m)}
+            )
+    resultado.sort(key=lambda r: r["cliente"].nombre)
+    return resultado
 
 
 def listar_recomendados() -> list[str]:
@@ -821,6 +860,18 @@ def _resolver_estado_id(nombre_estado: str, estados_por_nombre: dict, default_id
     return estados_por_nombre.get(nombre_estado.strip().lower(), default_id)
 
 
+def _coincidencias_z2_como_clientes(nombre: str, contacto: str) -> list[Cliente]:
+    """Carpetas de la copia local de Z2 que coinciden, en el mismo formato que los duplicados
+    locales, para que el resumen de la importación las muestre igual (marcadas como de Z2)."""
+    return [
+        Cliente(
+            id=None, nombre=z["nombre"], contacto=z["telefono"], estado_id=0,
+            fecha_actualizacion="", detalle=z["detalle"], origen="z2", id_remoto=z["id"],
+        )
+        for z in buscar_en_z2_casos(nombre, contacto)
+    ]
+
+
 def procesar_lote(filas: Iterable[FilaImport]) -> ResultadoLote:
     """Clasifica cada fila en OK (se carga directo) / duplicado (posible, queda para revisar)
     / fallido (falta nombre o contacto). No pide confirmación por fila: eso lo resuelve la UI
@@ -836,7 +887,7 @@ def procesar_lote(filas: Iterable[FilaImport]) -> ResultadoLote:
             resultado.fallidos.append((fila, "Falta nombre o contacto"))
             continue
 
-        dups = buscar_duplicados(nombre, contacto)
+        dups = buscar_duplicados(nombre, contacto) + _coincidencias_z2_como_clientes(nombre, contacto)
         if dups:
             resultado.duplicados.append((fila, dups))
             continue

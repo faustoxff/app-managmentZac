@@ -65,6 +65,7 @@ class PestanaZ2(tk.Toplevel):
             barra, text="Sincronizar con Z2", command=self._sincronizar
         )
         self.sincronizar_btn.pack(side="left", padx=4)
+        tk.Button(barra, text="Comparar con Z1", command=self._comparar).pack(side="left", padx=4)
         tk.Button(barra, text="Cerrar", command=self.destroy).pack(side="right", padx=8, pady=5)
 
         self.resumen_label = tk.Label(self, anchor="w", fg="gray30", **pad)
@@ -125,6 +126,11 @@ class PestanaZ2(tk.Toplevel):
         casos, cuando = db.listar_z2_casos()
         self._sincronizado_en = cuando
         self._pintar(casos)
+
+    def _comparar(self):
+        from ui.comparacion_z2_popup import ComparacionZ2Popup
+
+        ComparacionZ2Popup(self)
 
     def _sincronizar(self):
         self.sincronizar_btn.config(state="disabled", text="Sincronizando...")

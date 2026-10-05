@@ -92,5 +92,66 @@ class TestZ2Espejo(BaseDB):
         self.assertEqual(db.buscar_en_z2_casos("OTRO", "1111"), [])
 
 
+class TestComparacionZ1Z2(BaseDB):
+    def setUp(self):
+        super().setUp()
+        db.init_db()
+        self.nuevo = self.estado_id("NUEVO")
+
+    def test_coincide_por_telefono_aunque_haya_varios_en_el_campo(self):
+        db.crear_cliente("GARCIA GLORIA", "2235271271 / 5304959", self.nuevo)
+        db.reemplazar_z2_casos([caso("OTRA", "PERSONA", "530-4959")])
+        r = db.comparar_z1_con_z2()
+        self.assertEqual([(x["cliente"].nombre, x["motivo"]) for x in r], [("GARCIA GLORIA", "teléfono")])
+
+    def test_coincide_por_nombre_sin_tildes(self):
+        db.crear_cliente("ACEVEDO FELIX", "", self.nuevo)
+        db.reemplazar_z2_casos([caso("ACEVEDO", "FÉLIX", "")])
+        self.assertEqual(db.comparar_z1_con_z2()[0]["motivo"], "nombre")
+
+    def test_telefono_y_nombre_cuentan_una_sola_vez(self):
+        db.crear_cliente("PEREZ JUAN", "2235000001", self.nuevo)
+        db.reemplazar_z2_casos([caso("PEREZ", "JUAN", "2235000001")])
+        r = db.comparar_z1_con_z2()
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0]["motivo"], "teléfono y nombre")
+
+    def test_sin_coincidencias_y_no_modifica_nada(self):
+        db.crear_cliente("PEREZ JUAN", "2235000001", self.nuevo)
+        db.reemplazar_z2_casos([caso("GOMEZ", "ANA", "2235999999")])
+        con = sqlite3.connect(db.DB_PATH)
+        antes = (con.execute("SELECT * FROM clientes").fetchall(), con.execute("SELECT * FROM z2_casos").fetchall())
+        self.assertEqual(db.comparar_z1_con_z2(), [])
+        despues = (con.execute("SELECT * FROM clientes").fetchall(), con.execute("SELECT * FROM z2_casos").fetchall())
+        con.close()
+        self.assertEqual(antes, despues)
+
+
+class TestImportacionContraZ2(BaseDB):
+    def setUp(self):
+        super().setUp()
+        db.init_db()
+        db.reemplazar_z2_casos([caso("ACEVEDO", "FELIX", "2235244401")])
+
+    def test_fila_que_esta_en_z2_queda_para_revisar(self):
+        from db import FilaImport
+
+        r = db.procesar_lote([
+            FilaImport(nombre="ACEVEDO FELIX", contacto="2235-244401"),
+            FilaImport(nombre="OTRO", contacto="2235111111"),
+        ])
+        self.assertEqual(r.ok, 1)
+        self.assertEqual(len(r.duplicados), 1)
+        self.assertEqual(r.duplicados[0][1][0].origen, "z2")
+        self.assertEqual([c.nombre for c in db.listar_clientes()], ["OTRO"])
+
+    def test_cliente_local_se_reconoce_como_local_en_el_panel(self):
+        # Regresión: la columna "origen" de la base pisaba el origen del panel ("local").
+        db.crear_cliente("PEREZ JUAN", "2235000001", self.estado_id("NUEVO"), origen="z2")
+        c = db.buscar_posibles_duplicados("PEREZ JUAN", "2235000001")[0]
+        self.assertEqual(c.origen, "local")
+        self.assertEqual(c.procedencia, "z2")
+
+
 if __name__ == "__main__":
     unittest.main()
