@@ -286,6 +286,7 @@ class PestanaZ2(tk.Toplevel):
             estado_id=estado_id,
             notas=z2_sync.NOTA_ORIGEN_Z2,
             recomendado_por=str(caso.get("recomendado_por") or ""),
+            origen=z2_sync.ORIGEN_Z2,
         )
 
         messagebox.showinfo(

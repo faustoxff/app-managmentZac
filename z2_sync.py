@@ -43,6 +43,7 @@ MAX_IMPORTADOS_POR_PASADA = 200
 
 # Lo que se escribe en NOTAS del cliente importado. Sirve para que, mirando la
 # ficha, se vea de dónde salió y por qué existe.
+ORIGEN_Z2 = "z2"
 NOTA_ORIGEN_Z2 = "Importado desde Z2 (carpeta ART)."
 
 ESTADO_NUEVO = "NUEVO"
@@ -204,6 +205,7 @@ def importar(resultado: Resultado) -> list[int]:
             estado_id=estado,
             notas=NOTA_ORIGEN_Z2,
             recomendado_por=cliente.get("recomendado_por", ""),
+            origen=ORIGEN_Z2,
         )
         creados.append(cliente_id)
 
@@ -327,3 +329,14 @@ def probar_coincidencias() -> tuple[bool, str]:
     except Exception:  # noqa: BLE001
         return False, f"No se pudo llegar a Z2: revisé la URL y la conexión."
     return True, f"Conectado a {url}."
+
+
+def telefonos_en_z2() -> set[str]:
+    """Teléfonos (solo dígitos) de todas las carpetas que hoy hay en Z2. Levanta error si
+    no se pudo consultar: a diferencia de la integración de alta, acá el usuario pidió la
+    verificación explícitamente, así que tiene que enterarse si falló."""
+    return {
+        db.normalizar_telefono(caso["telefono"])
+        for caso in leer_casos_de_z2()
+        if caso.get("telefono")
+    } - {""}

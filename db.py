@@ -201,6 +201,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE clientes ADD COLUMN recomendado_por TEXT")
         if "fecha_recordatorio" not in columnas:
             conn.execute("ALTER TABLE clientes ADD COLUMN fecha_recordatorio TEXT")
+        if "origen" not in columnas:
+            conn.execute("ALTER TABLE clientes ADD COLUMN origen TEXT")
         if "contacto_normalizado" not in columnas:
             conn.execute("ALTER TABLE clientes ADD COLUMN contacto_normalizado TEXT")
             conn.execute(
@@ -434,6 +436,7 @@ def _row_to_cliente(r: sqlite3.Row) -> Cliente:
         notas=r["notas"] or "",
         recomendado_por=r["recomendado_por"] or "",
         fecha_recordatorio=r["fecha_recordatorio"] or "",
+        origen=r["origen"] or "",
         estado_nombre=r["estado_nombre"],
         estado_color=r["estado_color"],
     )
@@ -459,6 +462,7 @@ def listar_clientes(
     alta_hasta: Optional[str] = None,
     con_recordatorio: Optional[bool] = None,
     agrupar_por_estado: bool = False,
+    origen: Optional[str] = None,
 ) -> list[Cliente]:
     query = """
         SELECT c.*, e.nombre AS estado_nombre, e.color AS estado_color
@@ -482,6 +486,9 @@ def listar_clientes(
     if alta_hasta:
         query += " AND c.fecha_alta <= ?"
         params.append(alta_hasta + "T23:59:59")
+    if origen:
+        query += " AND c.origen = ?"
+        params.append(origen)
     if con_recordatorio is True:
         query += " AND c.fecha_recordatorio IS NOT NULL AND c.fecha_recordatorio != ''"
     elif con_recordatorio is False:
@@ -520,6 +527,7 @@ def crear_cliente(
     notas: str = "",
     recomendado_por: str = "",
     fecha_recordatorio: str = "",
+    origen: str = "",
 ) -> int:
     nombre = normalizar_nombre(nombre)
     with get_conn() as conn:
@@ -527,10 +535,10 @@ def crear_cliente(
         cur = conn.execute(
             "INSERT INTO clientes "
             "(nombre, contacto, estado_id, fecha_actualizacion, fecha_alta, notas, recomendado_por, "
-            "fecha_recordatorio, contacto_normalizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "fecha_recordatorio, contacto_normalizado, origen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 nombre, contacto, estado_id, ahora, ahora, notas, recomendado_por,
-                fecha_recordatorio or None, normalizar_telefono(contacto),
+                fecha_recordatorio or None, normalizar_telefono(contacto), origen or None,
             ),
         )
         return cur.lastrowid

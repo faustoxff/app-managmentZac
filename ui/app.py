@@ -122,6 +122,9 @@ class App(tk.Tk):
         consulta_menu.add_command(
             label="Clientes de Z2 (carpetas ART)", command=self._abrir_pestana_z2
         )
+        consulta_menu.add_command(
+            label="Importados de Z2", command=self._abrir_importados_z2
+        )
         menubar.add_cascade(label="Consulta", menu=consulta_menu)
 
         ayuda_menu = tk.Menu(menubar, tearoff=0)
@@ -153,6 +156,16 @@ class App(tk.Tk):
         from ui.integracion_z2_popup import IntegracionZ2Popup
 
         IntegracionZ2Popup(self)
+
+    def _abrir_importados_z2(self):
+        from ui.pestana_importados_z2 import PestanaImportadosZ2
+
+        existente = getattr(self, "_pestana_importados_z2", None)
+        if existente is not None and existente.winfo_exists():
+            existente.lift()
+            existente._cargar()
+            return
+        self._pestana_importados_z2 = PestanaImportadosZ2(self)
 
     def _abrir_pestana_z2(self):
         """Abre la consulta de clientes de Z2. Si ya está abierta, la trae al frente
