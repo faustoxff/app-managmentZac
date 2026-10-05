@@ -17,6 +17,7 @@ from ui.estados import EstadosPopup
 from ui.editar_lote_popup import EditarLotePopup
 from ui.filtros import FiltrosPopup
 from ui.ia_import_popup import IAImportPopup
+from ui.importar_z2_popup import abrir_importar_z2
 from ui.mapeo_excel_popup import MapeoColumnasPopup
 from ui.ocr_review_popup import OcrReviewPopup
 from ui.restaurar_backup_local_popup import RestaurarBackupLocalPopup
@@ -109,7 +110,19 @@ class App(tk.Tk):
         config_menu.add_command(
             label="Restaurar backup local (deshacer)", command=self._abrir_restaurar_local
         )
+        config_menu.add_command(
+            label="Integración con Z2 (carpetas ART)", command=self._abrir_integracion_z2
+        )
         menubar.add_cascade(label="Configuración", menu=config_menu)
+
+        # Los clientes que ya tienen carpeta ART en Z2. Es de SOLO CONSULTA: para ver
+        # si alguien que tu pap está por cargar le es cliente y ya tiene carpeta, sin
+        # tocar nada de Z2 ni de esta base.
+        consulta_menu = tk.Menu(menubar, tearoff=0)
+        consulta_menu.add_command(
+            label="Clientes de Z2 (carpetas ART)", command=self._abrir_pestana_z2
+        )
+        menubar.add_cascade(label="Consulta", menu=consulta_menu)
 
         ayuda_menu = tk.Menu(menubar, tearoff=0)
         ayuda_menu.add_command(label="Buscar actualización", command=self._buscar_actualizacion)
@@ -135,6 +148,26 @@ class App(tk.Tk):
 
     def _abrir_restaurar_local(self):
         RestaurarBackupLocalPopup(self, on_restaurado=self._on_restaurado_local)
+
+    def _abrir_integracion_z2(self):
+        from ui.integracion_z2_popup import IntegracionZ2Popup
+
+        IntegracionZ2Popup(self)
+
+    def _abrir_pestana_z2(self):
+        """Abre la consulta de clientes de Z2. Si ya está abierta, la trae al frente
+        en vez de acumular ventanas."""
+        from ui.pestana_z2 import PestanaZ2
+
+        existente = getattr(self, "_pestana_z2", None)
+        if existente is not None and existente.winfo_exists():
+            existente.lift()
+            existente.focus_force()
+            return
+
+        # Traer un cliente lo carga en la base local, así que al terminar hay que
+        # refrescar la tabla principal para que aparezca en la lista.
+        self._pestana_z2 = PestanaZ2(self, on_cliente_traido=lambda _id: self._refrescar())
 
     def _on_restaurado_local(self):
         # Después de pisar clientes.db con un backup local, re-corremos init_db() para que
@@ -190,10 +223,15 @@ class App(tk.Tk):
 
         # Empaquetados a la derecha en orden inverso al visual: el último en este bloque
         # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
-        # Importar Excel, Importar por foto, Importar con IA, Exportar Excel.
+        # Importar Excel, Importar desde Z2, Importar por foto, Importar con IA, Exportar Excel.
         tk.Button(bar, text="Exportar Excel", command=self._exportar_excel).pack(side="right", padx=4)
         tk.Button(bar, text="Importar con IA", command=self._importar_ia).pack(side="right", padx=4)
         tk.Button(bar, text="Importar por foto", command=self._importar_foto).pack(side="right", padx=4)
+        # Trae de Z2 solo nombre, teléfono y recomendado por; lo que coincide con un
+        # cliente existente no se crea. Va al lado de las demás importaciones.
+        tk.Button(bar, text="Importar desde Z2", command=self._importar_desde_z2).pack(
+            side="right", padx=4
+        )
         tk.Button(bar, text="Importar Excel", command=self._importar_excel).pack(side="right", padx=4)
         self.subida_btn = tk.Button(
             bar, text="Subida por celular", command=self._toggle_subida_celular
@@ -679,6 +717,12 @@ class App(tk.Tk):
         EditarLotePopup(self, clientes, on_guardado=self._refrescar)
 
     # ---------- Import Excel ----------
+
+    def _importar_desde_z2(self):
+        """Abre el popup de importación desde Z2. El popup lee Z2 y escribe en
+        un hilo aparte; al terminar recarga la lista para que los clientes nuevos
+        aparezcan sin tener que cerrar y abrir la app."""
+        abrir_importar_z2(self, al_terminar=self._refrescar)
 
     def _importar_excel(self):
         try:

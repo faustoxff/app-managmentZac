@@ -380,6 +380,17 @@ def listar_estados() -> list[Estado]:
         return [Estado(id=r["id"], nombre=r["nombre"], color=r["color"], orden=r["orden"]) for r in rows]
 
 
+def obtener_id_estado(nombre: str) -> int | None:
+    """Id de un estado por nombre (case-insensitive), o None si no existe. Lo
+    usa la importación desde Z2, que deja a los clientes en un estado fijo."""
+    objetivo = nombre.strip().upper()
+    with get_conn() as conn:
+        fila = conn.execute(
+            "SELECT id FROM estados WHERE UPPER(nombre) = ?", (objetivo,)
+        ).fetchone()
+    return fila["id"] if fila else None
+
+
 def crear_estado(nombre: str, color: str = "#808080") -> int:
     nombre = nombre.strip().upper()
     with get_conn() as conn:

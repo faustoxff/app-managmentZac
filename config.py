@@ -86,6 +86,44 @@ def guardar_neon_connection_string(connection_string: str) -> None:
     _escribir_config(datos)
 
 
+def obtener_z2_url() -> str:
+    """URL base de Z2 (Gestor de Carpetas ART), sin la ruta /api... Ej: https://mi-z2.onrender.com
+    Vacío si la integración con Z2 nunca se configuró."""
+    return _leer_config().get("z2_url", "")
+
+
+def guardar_z2_url(url: str) -> None:
+    datos = _leer_config()
+    datos["z2_url"] = url.strip().rstrip("/")
+    _escribir_config(datos)
+
+
+def obtener_z2_token() -> str:
+    """Token de integración que Z2 exige en el header Authorization. Es el INTEGRATION_TOKEN
+    del .env de Z2; no es el login de un usuario de Z2. Vacío si nunca se configuró."""
+    return _leer_config().get("z2_token", "")
+
+
+def guardar_z2_token(token: str) -> None:
+    datos = _leer_config()
+    datos["z2_token"] = token.strip()
+    _escribir_config(datos)
+
+
+def obtener_z2_read_url() -> str:
+    """Cadena de conexión de SOLO LECTURA a la base de Z2, para la importación
+    de clientes (ver z2_sync.py). Es el usuario z1_lector, que únicamente puede
+    leer 3 columnas de public.cases: apellido, nombre y telefono. No usar la del
+    dueño de la base. Vacío si la importación nunca se configuró."""
+    return _leer_config().get("z2_read_url", "")
+
+
+def guardar_z2_read_url(connection_string: str) -> None:
+    datos = _leer_config()
+    datos["z2_read_url"] = connection_string.strip()
+    _escribir_config(datos)
+
+
 def obtener_backup_automatico() -> bool:
     return bool(_leer_config().get("backup_automatico", False))
 

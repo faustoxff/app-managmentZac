@@ -54,9 +54,16 @@ class PanelDuplicados(tk.Toplevel):
         # vistazo. El estado no suma acá (no estás decidiendo un cambio de estado, solo
         # "¡uh, este señor ya está cargado!") y el motivo de la coincidencia ya se dice en el
         # subtítulo de arriba, que no obliga a leer una columna más.
-        cols = ("nombre", "contacto")
+        #
+        # "origen" sí hace falta: desde que existe la integración con Z2, la misma pantalla
+        # puede mezclar clientes de esta base con carpetas del otro programa, y un cliente que
+        # está en los dos aparece dos veces. Sin esta columna el padre ve al mismo señor listado
+        # dos veces sin poder saber de dónde salió cada uno, que es justo lo que el panel
+        # existe para evitar.
+        cols = ("origen", "nombre", "contacto")
         self.tree = ttk.Treeview(self, columns=cols, show="headings", height=MAX_FILAS_VISIBLES)
         for c, label, ancho in [
+            ("origen", "Origen", 60),
             ("nombre", "Nombre", 190),
             ("contacto", "Teléfono", 130),
         ]:
@@ -87,24 +94,45 @@ class PanelDuplicados(tk.Toplevel):
 
         self.tree.delete(*self.tree.get_children())
         for c in coincidencias[:MAX_FILAS_VISIBLES]:
-            self.tree.insert("", "end", iid=str(c.id), values=(c.nombre, c.contacto))
+            self.tree.insert(
+                "",
+                "end",
+                iid=iid_de(c),
+                values=(etiqueta_origen(c.origen), c.nombre, c.contacto),
+            )
         if coincidencias:
-            self.tree.selection_set(str(coincidencias[0].id))
+            self.tree.selection_set(iid_de(coincidencias[0]))
 
         exactas = sum(1 for c in coincidencias if self._motivo(c) == "teléfono")
+        remotas = sum(1 for c in coincidencias if c.origen == "z2")
+        partes = []
         if exactas:
             # Un teléfono igual es el caso fuerte: se dice explícitamente.
-            self.subtitulo_label.config(text=f"({exactas} por teléfono)", fg="#b91c1c")
+            partes.append(f"{exactas} por teléfono")
         else:
-            self.subtitulo_label.config(text="(solo por nombre)", fg="#92620a")
+            partes.append("solo por nombre")
+        if remotas:
+            partes.append(f"{remotas} de Z2")
+        texto = f"({' — '.join(partes)})"
+        self.subtitulo_label.config(
+            text=texto, fg="#b91c1c" if exactas else "#92620a"
+        )
 
+        # Las coincidencias de Z2 traen un texto extra (ART, estado, prioridad) que no cabe en
+        # una columna más sin ensanchar el panel; va en el pie, que se lee sin clicking nada.
+        detalle = next((c.detalle for c in coincidencias if c.origen == "z2" and c.detalle), "")
+
+        lineas = []
+        if detalle:
+            lineas.append(f"En Z2: {detalle}")
         if len(coincidencias) > MAX_FILAS_VISIBLES:
-            self.pie_label.config(
-                text=f"Mostrando {MAX_FILAS_VISIBLES} de {len(coincidencias)} — "
-                "se guardan igual si confirmás.\nDoble clic para ver el cliente existente."
+            lineas.append(
+                f"Mostrando {MAX_FILAS_VISIBLES} de {len(coincidencias)} — "
+                "se guardan igual si confirmás."
             )
-        else:
-            self.pie_label.config(text="Doble clic para ver el cliente existente.")
+        if any(c.origen == "local" for c in coincidencias):
+            lineas.append("Doble clic para ver el cliente existente.")
+        self.pie_label.config(text="\n".join(lineas))
 
         self._reubicar()
         self.deiconify()
@@ -128,11 +156,22 @@ class PanelDuplicados(tk.Toplevel):
         return "nombre"
 
     def _ver_existente(self, _event=None):
+        """Doble clic / Enter sobre una fila.
+
+        Solo tiene sentido para las locales: abrir un Cliente de Z2 con este popup llamaría a
+        buscar/editar en la base LOCAL con un id que no existe acá (y que además es un uuid, no
+        el entero que espera db.py). Las de Z2 muestran su detalle en la fila de abajo."""
         sel = self.tree.selection()
         if not sel or not self.on_ver_existente:
             return
-        cliente_id = int(sel[0])
-        elegido = next((c for c in self._coincidencias if c.id == cliente_id), None)
+        iid = sel[0]
+        origen, _, cliente_id = iid.partition(":")
+        if origen != "local":
+            return
+        elegido = next(
+            (c for c in self._coincidencias if c.origen == "local" and str(c.id) == cliente_id),
+            None,
+        )
         if elegido is not None:
             self.on_ver_existente(elegido)
 
@@ -154,6 +193,23 @@ class PanelDuplicados(tk.Toplevel):
         x = min(x, max_x)
         y = min(y, max_y)
         self.geometry(f"+{max(x, MARGEN_PANTALLA_PX)}+{max(y, MARGEN_PANTALLA_PX)}")
+
+
+def iid_de(c: Cliente) -> str:
+    """Identificador de fila en el Treeview.
+
+    Tiene que ser único sí o sí: Treeview lanza TclError si se inserta un iid repetido, así
+    que no alcanza con el id de la base. Se arma con el origen adelante y el id de LA BASE DE
+    ORIGEN: los locales usan `id` (un entero de esta base) y los de Z2 usan `id_remoto` (el
+    uuid de la carpeta), porque no son el mismo tipo de dato ni del mismo espacio de ids.
+    """
+    return f"{c.origen}:{c.id if c.origen == 'local' else c.id_remoto}"
+
+
+def etiqueta_origen(origen: str) -> str:
+    """Texto de la columna Origen. 'Z2' es corto a propósito: la columna tiene 60px y la idea
+    es que se lea de reojo, no que ocupe el lugar del nombre."""
+    return "Z2" if origen == "z2" else "Local"
 
 
 def normalizar_contacto(contacto: str) -> str:

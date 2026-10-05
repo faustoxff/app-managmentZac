@@ -60,6 +60,33 @@ mismo OCR de "Importar por foto" automáticamente, sin tocar nada más en la PC.
 - El botón "Desactivar" (dentro del popup del QR) cierra el servidor; también se cierra solo
   al cerrar la app.
 
+## Integración con Z2 (carpetas ART)
+
+Z2 es el Gestor de Carpetas ART (web, React + Express + Neon). Al dar de alta un cliente,
+Z1 le consulta si esa persona ya tiene una carpeta allá, y si aparece, avisa en el mismo panel
+lateral de coincidencias — con una columna "Origen" para distinguir `Local` de `Z2`.
+
+La dirección es **Z1 → Z2**, y no al revés, por una razón concreta: Z2 es una web que está
+siempre levantada; Z1 es un `.exe` de escritorio que puede estar apagado. Si fuera Z2 el que
+empujara el aviso, se perdería cada vez que la PC no está prendida.
+
+- Z1 **solo lee** de Z2. Nunca escribe ni borra nada de la base del otro programa.
+- La normalización (mayúsculas, sin tildes, teléfono solo dígitos) vive **solo en Z2**, en su
+  `server/integracion.js`. Z1 manda el texto crudo del formulario a propósito: si pre-normalizara
+  acá, los dos lados podrían divergir sin que nada lo indique.
+- Es a prueba de caídas: si Z2 está apagado, sin internet, con la URL mal puesta o devolviendo
+  cualquier cosa, `integracion_z2.buscar_coincidencias()` devuelve lista vacía y Z1 sigue
+  funcionando exactamente igual. La integración suma información, nunca puede romper la app.
+- La consulta va en un hilo aparte, con timeout de 3s. Es una búsqueda EN VIVO (cada tecla con
+  un debounce de 300ms): consultarla en el hilo de la UI congelaría la ventana, y un timeout
+  largo dejaría respuestas viejas tapando las nuevas. Cada respuesta se descarta si mientras
+  tanto se tipeó algo más nuevo.
+
+Configuración: **Configuración → Integración con Z2**. Se pone la URL base de Z2 y el
+`INTEGRATION_TOKEN` de su `.env`; quedan guardados en el `config.json` de la app, no en el
+repo. Con "Probar conexión" se verifica sin tener que cargar un cliente de prueba. Si lo dejás
+vacío, la integración queda apagada.
+
 ## Dónde se guarda la base de datos
 
 - Windows: `%APPDATA%\GestorClientes\clientes.db`
@@ -137,7 +164,8 @@ directamente.
   cargados y se parecen. Busca por teléfono (exacto) y por nombre (contenido: tipeando "JOSE"
   ya avisa que existe "JOSE GARCIA"). No frena la escritura ni se lleva el foco del campo, y
   doble clic en una fila abre el cliente existente. Igual al completar el nombre, sigue
-  apareciendo el aviso modal de confirmación al apretar Guardar.
+  apareciendo el aviso modal de confirmación al apretar Guardar. Si está configurada la
+  integración con Z2, el mismo panel incluye las carpetas del otro programa (ver arriba).
 - **Importar Excel** (`.xlsx`): deja mapear qué columna del archivo corresponde a cada campo
   (nombre, contacto, estado, notas), y recuerda el último mapeo usado para no repetirlo con
   archivos del mismo formato. Al final muestra cuántos se cargaron OK, cuántos son posibles
