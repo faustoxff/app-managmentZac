@@ -42,7 +42,7 @@ class IntegracionZ2Popup(tk.Toplevel):
 
         tk.Label(
             self,
-            text="Conexión de solo lectura a la base de Z2 (para Configuración → Importar desde Z2)",
+            text="Conexión de solo lectura a la base de Z2 (para la Pestaña Z2 → Sincronizar con Z2)",
             anchor="w", wraplength=420, justify="left",
         ).pack(padx=16, fill="x")
         self.read_url_var = tk.StringVar(value=config.obtener_z2_read_url())

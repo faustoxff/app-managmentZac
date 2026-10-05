@@ -17,7 +17,6 @@ from ui.estados import EstadosPopup
 from ui.editar_lote_popup import EditarLotePopup
 from ui.filtros import FiltrosPopup
 from ui.ia_import_popup import IAImportPopup
-from ui.importar_z2_popup import abrir_importar_z2
 from ui.mapeo_excel_popup import MapeoColumnasPopup
 from ui.ocr_review_popup import OcrReviewPopup
 from ui.restaurar_backup_local_popup import RestaurarBackupLocalPopup
@@ -236,16 +235,11 @@ class App(tk.Tk):
 
         # Empaquetados a la derecha en orden inverso al visual: el último en este bloque
         # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
-        # Importar Excel, Importar desde Z2, Importar por foto, Importar con IA, Exportar Excel.
+        # Importar Excel, Importar por foto, Importar con IA, Pestaña Z2, Exportar Excel.
         tk.Button(bar, text="Exportar Excel", command=self._exportar_excel).pack(side="right", padx=4)
         tk.Button(bar, text="Pestaña Z2", command=self._abrir_pestana_z2).pack(side="right", padx=4)
         tk.Button(bar, text="Importar con IA", command=self._importar_ia).pack(side="right", padx=4)
         tk.Button(bar, text="Importar por foto", command=self._importar_foto).pack(side="right", padx=4)
-        # Trae de Z2 solo nombre, teléfono y recomendado por; lo que coincide con un
-        # cliente existente no se crea. Va al lado de las demás importaciones.
-        tk.Button(bar, text="Importar desde Z2", command=self._importar_desde_z2).pack(
-            side="right", padx=4
-        )
         tk.Button(bar, text="Importar Excel", command=self._importar_excel).pack(side="right", padx=4)
         self.subida_btn = tk.Button(
             bar, text="Subida por celular", command=self._toggle_subida_celular
@@ -731,17 +725,6 @@ class App(tk.Tk):
         EditarLotePopup(self, clientes, on_guardado=self._refrescar)
 
     # ---------- Import Excel ----------
-
-    def _importar_desde_z2(self):
-        """Abre el popup de importación desde Z2. El popup lee Z2 y escribe en
-        un hilo aparte; al terminar recarga la lista para que los clientes nuevos
-        aparezcan sin tener que cerrar y abrir la app."""
-        abrir_importar_z2(self, al_terminar=self._al_terminar_importacion_z2)
-
-    def _al_terminar_importacion_z2(self):
-        self._refrescar()
-        if db.listar_clientes(origen="z2"):
-            self._abrir_importados_z2()
 
     def _importar_excel(self):
         try:

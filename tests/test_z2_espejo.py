@@ -84,6 +84,13 @@ class TestZ2Espejo(BaseDB):
         self.assertEqual(segunda.nuevos, [])
         self.assertEqual(len(db.listar_clientes()), 3)
 
+    def test_aviso_de_duplicado_busca_en_la_copia_local(self):
+        z2_sync.leer_casos_de_z2 = lambda: [caso("ACEVEDO", "FELIX", "2235-244401")]
+        z2_sync.sincronizar_copia_local()
+        self.assertEqual(len(db.buscar_en_z2_casos("CUALQUIERA", "2235244401")), 1)
+        self.assertEqual(len(db.buscar_en_z2_casos("Acevedo Félix", "")), 1)
+        self.assertEqual(db.buscar_en_z2_casos("OTRO", "1111"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

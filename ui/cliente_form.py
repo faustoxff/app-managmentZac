@@ -334,12 +334,27 @@ class ClienteForm(tk.Toplevel):
                 self._guardar_final(nombre, contacto, estado_id, notas, recomendado_por)
 
         def consultar():
+            # Primero la copia local de Z2 (la que baja "Sincronizar con Z2"): anda sin
+            # internet. Después, si está configurada, la consulta en vivo a Z2.
+            try:
+                locales = db.buscar_en_z2_casos(nombre, contacto)
+            except Exception:  # noqa: BLE001 - nunca romper el guardado por esto
+                locales = []
             try:
                 remotas = z2_sync.buscar_coincidencias_en_z2(nombre, contacto)
             except Exception:  # noqa: BLE001 - nunca romper el guardado por esto
                 remotas = []
+            coincidencias = [r for r in locales + remotas if isinstance(r, dict)]
+            # La misma carpeta puede venir de las dos fuentes: se muestra una sola vez.
+            vistas = set()
+            unicas = []
+            for r in coincidencias:
+                clave = (db.normalizar_telefono(r.get("telefono", "")), db.normalizar_nombre(r.get("nombre", "")))
+                if clave not in vistas:
+                    vistas.add(clave)
+                    unicas.append(r)
+            coincidencias = unicas
             # after(0) salta al hilo de la UI: Tkinter no deja tocar widgets desde otro.
-            coincidencias = [r for r in remotas if isinstance(r, dict)]
             try:
                 self.after(0, lambda: seguir(coincidencias))
             except tk.TclError:

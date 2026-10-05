@@ -496,6 +496,26 @@ def listar_z2_casos() -> tuple[list[dict], str]:
     return casos, cuando
 
 
+def buscar_en_z2_casos(nombre: str, contacto: str) -> list[dict]:
+    """Carpetas de la copia local de Z2 que coinciden con un cliente que se está por cargar:
+    por teléfono (sólo dígitos) o por nombre completo exacto. Funciona sin internet. Devuelve
+    el mismo formato que la consulta por HTTP a Z2, para mostrarlas en el mismo aviso."""
+    telefono = normalizar_telefono(contacto)
+    nombre_norm = normalizar_nombre(nombre)
+    coincidencias = []
+    for c in listar_z2_casos()[0]:
+        completo = f"{c['apellido']} {c['nombre']}".strip()
+        mismo_tel = bool(telefono) and normalizar_telefono(c["telefono"]) == telefono
+        mismo_nombre = bool(nombre_norm) and normalizar_nombre(completo) == nombre_norm
+        if mismo_tel or mismo_nombre:
+            detalle = " · ".join(x for x in (c["art"], c["estado_planilla"]) if x) or "carpeta en Z2"
+            coincidencias.append(
+                {"id": f"local:{completo}:{c['telefono']}", "nombre": completo,
+                 "telefono": c["telefono"], "detalle": detalle}
+            )
+    return coincidencias
+
+
 def listar_recomendados() -> list[str]:
     """Valores distintos y no vacíos de "recomendado por", para armar la lista del filtro."""
     with get_conn() as conn:
