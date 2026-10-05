@@ -224,7 +224,7 @@ def abrir_importar_z2(master, al_terminar=None):
                 master,
                 None,
                 "La importación desde Z2 no está configurada.\n\n"
-                "Va en Configuración → Conexión con Z2 (solo lectura).",
+                "Va en Configuración → Integración con Z2 (carpetas ART), campo de solo lectura.",
                 al_terminar,
             )
             return

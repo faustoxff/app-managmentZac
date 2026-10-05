@@ -40,6 +40,16 @@ class IntegracionZ2Popup(tk.Toplevel):
             padx=16, pady=(0, 10)
         )
 
+        tk.Label(
+            self,
+            text="Conexión de solo lectura a la base de Z2 (para Configuración → Importar desde Z2)",
+            anchor="w", wraplength=420, justify="left",
+        ).pack(padx=16, fill="x")
+        self.read_url_var = tk.StringVar(value=config.obtener_z2_read_url())
+        tk.Entry(self, textvariable=self.read_url_var, show="•", width=52).pack(
+            padx=16, pady=(0, 10)
+        )
+
         self.estado_label = tk.Label(self, text="", fg="gray30", wraplength=420, justify="left")
         self.estado_label.pack(padx=16, pady=(4, 0), anchor="w")
 
@@ -59,6 +69,7 @@ class IntegracionZ2Popup(tk.Toplevel):
     def _guardar_config(self):
         config.guardar_z2_url(self.url_var.get())
         config.guardar_z2_token(self.token_var.get())
+        config.guardar_z2_read_url(self.read_url_var.get())
 
     def _guardar(self):
         self._guardar_config()

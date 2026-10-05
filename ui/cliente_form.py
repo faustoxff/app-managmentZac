@@ -319,7 +319,7 @@ class ClienteForm(tk.Toplevel):
         self.generacion_guardado = getattr(self, "generacion_guardado", 0) + 1
         generacion = self.generacion_guardado
 
-        def seguir():
+        def seguir(coincidencias):
             # Si el usuario cerró el formulario mientras se consultaba, no se toca nada.
             if generacion != self.generacion_guardado or not self.winfo_exists():
                 return
@@ -341,7 +341,7 @@ class ClienteForm(tk.Toplevel):
             # after(0) salta al hilo de la UI: Tkinter no deja tocar widgets desde otro.
             coincidencias = [r for r in remotas if isinstance(r, dict)]
             try:
-                self.after(0, seguir)
+                self.after(0, lambda: seguir(coincidencias))
             except tk.TclError:
                 pass  # se cerró la ventana: no hay a quién avisarle
 
