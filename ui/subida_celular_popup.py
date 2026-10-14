@@ -34,8 +34,16 @@ class SubidaCelularPopup(tk.Toplevel):
         entry = tk.Entry(self, textvariable=url_var, justify="center", state="readonly", width=30)
         entry.pack(padx=16, pady=(0, 4))
         tk.Label(self, text="(o escribí esa dirección en el navegador del celular a mano)", fg="gray30").pack(
-            padx=16, pady=(0, 12)
+            padx=16, pady=(0, 6)
         )
+        tk.Label(
+            self,
+            text="Si en el celular se queda cargando: fijate que esté en el mismo WiFi que la PC "
+            "(no en datos ni en la red de invitados).",
+            fg="gray30",
+            wraplength=300,
+            justify="center",
+        ).pack(padx=16, pady=(0, 12))
 
         tk.Button(self, text="Desactivar", command=self._desactivar, width=16).pack(pady=(0, 16))
 

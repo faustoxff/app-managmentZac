@@ -85,6 +85,29 @@ class TestGuardarClienteNuevo(BaseDB):
             z2_sync.buscar_coincidencias_en_z2 = z2_orig
             root.destroy()
 
+    def test_decir_no_al_aviso_de_z2_limpia_y_deja_cargar_el_siguiente(self):
+        import z2_sync
+        from ui.cliente_form import ClienteForm
+        import tkinter.messagebox as mb
+
+        root = self._ventana()
+        z2_orig = z2_sync.buscar_coincidencias_en_z2
+        z2_sync.buscar_coincidencias_en_z2 = lambda n, t: (
+            [{"id": "x", "nombre": "ACEVEDO FELIX", "telefono": t, "detalle": ""}] if t == "2235244401" else []
+        )
+        mb.askyesno = lambda *a, **k: False
+        mb.showwarning = mb.showerror = mb.showinfo = lambda *a, **k: None
+        try:
+            form = ClienteForm(root, on_saved=lambda: None)
+            self._guardar_y_esperar(root, form, "ACEVEDO FELIX", "2235244401")
+            self.assertEqual(form.nombre_var.get(), "")
+            self.assertIn("no se cargó", form.guardado_label.cget("text"))
+            self._guardar_y_esperar(root, form, "OTRA PERSONA", "2235999999")
+            self.assertEqual([c.nombre for c in db.listar_clientes()], ["OTRA PERSONA"])
+        finally:
+            z2_sync.buscar_coincidencias_en_z2 = z2_orig
+            root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

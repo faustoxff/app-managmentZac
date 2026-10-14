@@ -928,6 +928,8 @@ class App(tk.Tk):
             )
             return
 
+        self._asegurar_permiso_firewall()
+
         self.cola_fotos = queue.Queue()
         servidor = photo_server.PhotoServer(config.carpeta_fotos_pendientes(), self.cola_fotos)
         try:
@@ -946,6 +948,32 @@ class App(tk.Tk):
 
         SubidaCelularPopup(self, ip, puerto, on_desactivar=self._desactivar_subida_celular)
         self._revisar_cola_fotos()
+
+    def _asegurar_permiso_firewall(self):
+        """En Windows, deja armado el permiso del firewall para que el celular pueda conectarse
+        en cualquier WiFi (ver firewall_windows.py). Pregunta una vez por sesión."""
+        import firewall_windows
+
+        if not firewall_windows.aplica() or getattr(self, "_firewall_preguntado", False):
+            return
+        if firewall_windows.regla_existe():
+            return
+        self._firewall_preguntado = True
+        if not messagebox.askyesno(
+            "Permiso de Windows",
+            "Para que el celular pueda conectarse en cualquier WiFi (no solo en el del "
+            "estudio), Windows tiene que darle permiso al programa en el firewall.\n\n"
+            "Si tocás Sí, Windows te va a mostrar un cartel pidiendo confirmación. "
+            "Se hace una sola vez.\n\n¿Configurarlo ahora?",
+        ):
+            return
+        if not firewall_windows.configurar():
+            messagebox.showwarning(
+                "Sin permiso del firewall",
+                "No se pudo configurar el permiso (¿se canceló el cartel de Windows?).\n\n"
+                "La subida por celular se activa igual, pero en algunas redes puede quedarse "
+                "cargando. Se puede volver a intentar la próxima vez que abras el programa.",
+            )
 
     def _desactivar_subida_celular(self):
         if self.photo_server is not None:

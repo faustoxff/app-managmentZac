@@ -68,3 +68,12 @@ class TestFiltroConRecordatorio(BaseDB):
     def test_sin_filtro_trae_los_dos(self):
         nombres = sorted(c.nombre for c in db.listar_clientes())
         self.assertEqual(nombres, ["CON TURNO", "SIN TURNO"])
+
+
+class TestEditarSinPerderRecordatorio(BaseDB):
+    def test_actualizar_sin_mandar_fecha_no_borra_el_recordatorio(self):
+        db.init_db()
+        cid = db.crear_cliente("A", "1", self.estado_id("NUEVO"), "", "", "2026-10-20")
+        # "Editar seleccionados" no manda la fecha: antes esto la borraba.
+        db.actualizar_cliente(cid, "A", "1", self.estado_id("NUEVO"), "", "ARA")
+        self.assertEqual(db.listar_clientes()[0].fecha_recordatorio, "2026-10-20")

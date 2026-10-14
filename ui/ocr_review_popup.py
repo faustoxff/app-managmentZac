@@ -23,7 +23,10 @@ class OcrReviewPopup(tk.Toplevel):
         self.on_cerrar = on_cerrar
 
         self.title("Revisar datos detectados en la foto")
-        self.geometry("520x420")
+        # Alta para ver la planilla entera sin bajar (una hoja trae ~13 pacientes, ~32 px cada
+        # uno), pero sin pasarse del alto de la pantalla.
+        alto = max(420, min(240 + 37 * max(len(candidatos), 1), self.winfo_screenheight() - 120))
+        self.geometry(f"560x{alto}")
         self.transient(master)
         self.grab_set()
         self.protocol("WM_DELETE_WINDOW", self._cerrar)

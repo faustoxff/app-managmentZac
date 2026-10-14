@@ -664,27 +664,24 @@ def actualizar_cliente(
     estado_id: int,
     notas: str,
     recomendado_por: str = "",
-    fecha_recordatorio: str = "",
+    fecha_recordatorio: Optional[str] = None,
 ) -> None:
+    """fecha_recordatorio: None deja el recordatorio como estaba; "" lo quita. (Antes el
+    default borraba el recordatorio, y "Editar seleccionados", que no lo manda, los perdía.)"""
     nombre = normalizar_nombre(nombre)
+    campos = (
+        "nombre = ?, contacto = ?, estado_id = ?, fecha_actualizacion = ?, notas = ?, "
+        "recomendado_por = ?, contacto_normalizado = ?"
+    )
+    valores = [
+        nombre, contacto, estado_id, _now_iso(), notas, recomendado_por, normalizar_telefono(contacto),
+    ]
+    if fecha_recordatorio is not None:
+        campos += ", fecha_recordatorio = ?"
+        valores.append(fecha_recordatorio or None)
     with get_conn() as conn:
         # fecha_alta NO se toca acá a propósito: se setea una sola vez, al crear el registro.
-        conn.execute(
-            "UPDATE clientes SET nombre = ?, contacto = ?, estado_id = ?, "
-            "fecha_actualizacion = ?, notas = ?, recomendado_por = ?, fecha_recordatorio = ?, "
-            "contacto_normalizado = ? WHERE id = ?",
-            (
-                nombre,
-                contacto,
-                estado_id,
-                _now_iso(),
-                notas,
-                recomendado_por,
-                fecha_recordatorio or None,
-                normalizar_telefono(contacto),
-                cliente_id,
-            ),
-        )
+        conn.execute(f"UPDATE clientes SET {campos} WHERE id = ?", (*valores, cliente_id))
 
 
 def listar_recordatorios_de_hoy() -> list[Cliente]:

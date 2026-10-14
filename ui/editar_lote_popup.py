@@ -51,14 +51,26 @@ class EditarLotePopup(tk.Toplevel):
             side="left"
         )
 
+        reco_masivo_frame = tk.Frame(self)
+        reco_masivo_frame.pack(padx=12, pady=(0, 8), anchor="w")
+        tk.Label(reco_masivo_frame, text="Poner a todos los seleccionados recomendado por:").pack(
+            side="left"
+        )
+        self.reco_masivo_var = tk.StringVar()
+        ttk.Combobox(
+            reco_masivo_frame, textvariable=self.reco_masivo_var, values=db.listar_recomendados(), width=18
+        ).pack(side="left", padx=6)
+        tk.Button(
+            reco_masivo_frame, text="Aplicar a todos", command=self._aplicar_recomendado_masivo
+        ).pack(side="left")
+
         header = tk.Frame(self)
         header.pack(fill="x", padx=12)
         for texto, ancho in [
             ("Nombre", 20),
             ("Teléfono", 14),
             ("Estado", 12),
-            ("Notas", 16),
-            ("Recomendado por", 14),
+            ("Recomendado por", 18),
         ]:
             tk.Label(header, text=texto, width=ancho, anchor="w").pack(side="left", padx=2)
 
@@ -91,7 +103,6 @@ class EditarLotePopup(tk.Toplevel):
         nombre_var = tk.StringVar(value=cliente.nombre)
         contacto_var = tk.StringVar(value=cliente.contacto)
         estado_var = tk.StringVar(value=cliente.estado_nombre)
-        notas_var = tk.StringVar(value=cliente.notas)
         recomendado_var = tk.StringVar(value=cliente.recomendado_por)
 
         e_nombre = tk.Entry(fila_frame, textvariable=nombre_var, width=20)
@@ -102,9 +113,7 @@ class EditarLotePopup(tk.Toplevel):
             fila_frame, textvariable=estado_var, values=self.nombres_estados, state="readonly", width=10
         )
         combo_estado.pack(side="left", padx=2)
-        e_notas = tk.Entry(fila_frame, textvariable=notas_var, width=16)
-        e_notas.pack(side="left", padx=2)
-        e_recomendado = tk.Entry(fila_frame, textvariable=recomendado_var, width=14)
+        e_recomendado = tk.Entry(fila_frame, textvariable=recomendado_var, width=18)
         e_recomendado.pack(side="left", padx=2)
 
         aviso_label = tk.Label(fila_frame, text="⚠️ posible duplicado", fg="#92620a")
@@ -117,15 +126,25 @@ class EditarLotePopup(tk.Toplevel):
             "nombre_var": nombre_var,
             "contacto_var": contacto_var,
             "estado_var": estado_var,
-            "notas_var": notas_var,
             "recomendado_var": recomendado_var,
-            "entries": (e_nombre, e_contacto, e_notas, e_recomendado),
+            "entries": (e_nombre, e_contacto, e_recomendado),
             "aviso_label": aviso_label,
             "forzar_btn": forzar_btn,
             "guardada": False,
         }
         forzar_btn.config(command=lambda f=fila: self._forzar_fila(f))
         self.filas.append(fila)
+
+    def _aplicar_recomendado_masivo(self):
+        valor = self.reco_masivo_var.get().strip()
+        if not valor:
+            messagebox.showinfo(
+                "Recomendado por", "Escribí o elegí a quién poner como recomendado por.", parent=self
+            )
+            return
+        for fila in self.filas:
+            if not fila["guardada"]:
+                fila["recomendado_var"].set(valor)
 
     def _aplicar_estado_masivo(self):
         nuevo_estado = self.estado_masivo_var.get()
@@ -139,7 +158,7 @@ class EditarLotePopup(tk.Toplevel):
     def _valores_actuales(self, fila: dict):
         nombre = fila["nombre_var"].get().strip()
         contacto = fila["contacto_var"].get().strip()
-        notas = fila["notas_var"].get().strip()
+        notas = fila["cliente"].notas  # las notas no se editan en lote: quedan como estaban
         recomendado_por = fila["recomendado_var"].get().strip()
         estado_id = next(e.id for e in self.estados if e.nombre == fila["estado_var"].get())
         return nombre, contacto, notas, recomendado_por, estado_id

@@ -409,6 +409,13 @@ class ClienteForm(tk.Toplevel):
         ):
             self._cerrar_panel_duplicados()
             self._guardar_final(nombre, contacto, estado_id, notas, recomendado_por)
+        elif self.cliente is None:
+            # "No" cancela este cliente: el formulario queda limpio y listo para el siguiente,
+            # igual que después de guardar. Antes quedaban los datos, el panel de Z2 y el
+            # estado de la consulta anterior, y había que cerrar la ventana para seguir.
+            self._limpiar_para_siguiente(
+                nombre, mensaje=f"✗ {nombre} no se cargó: ya tiene carpeta en Z2"
+            )
 
     def _guardar_final(self, nombre, contacto, estado_id, notas, recomendado_por):
         if self.cliente:
@@ -427,7 +434,7 @@ class ClienteForm(tk.Toplevel):
         # y volver a abrir "Nuevo cliente" por cada uno es más lento que solo seguir tipeando.
         self._limpiar_para_siguiente(nombre)
 
-    def _limpiar_para_siguiente(self, nombre_guardado: str):
+    def _limpiar_para_siguiente(self, nombre_guardado: str, mensaje: str | None = None):
         # El panel se cierra explícitamente y no se espera al debounce: los traces de los
         # StringVar de abajo van a disparar una búsqueda con los campos recién vacíos, pero
         # quedaría mostrando el cliente recién guardado hasta que corra.
@@ -438,7 +445,9 @@ class ClienteForm(tk.Toplevel):
         self.notas_text.delete("1.0", "end")
         self._recordatorio_fecha = ""
         self._refrescar_label_recordatorio()
-        self.guardado_label.config(text=f"✓ {nombre_guardado} guardado — listo para cargar otro")
+        self.guardado_label.config(
+            text=mensaje or f"✓ {nombre_guardado} guardado — listo para cargar otro"
+        )
         self.nombre_entry.focus_set()
 
     def _ver_existente(self, cliente_existente: Cliente):

@@ -40,6 +40,7 @@ LINEAS_DE_BUSQUEDA_TELEFONO = 2  # además de la línea del nombre, busca en las
 MAX_PALABRAS_POR_TELEFONO = 3  # cuántos tokens consecutivos se combinan como candidato
 UMBRAL_CONFIANZA_PARA_REFINAR = 70  # 0-100: por debajo de esto, vale la pena intentar el
 # recorte+whitelist; por encima, la pasada general ya viene bien y no conviene arriesgarla.
+LADO_OCR = 2000  # lado largo (px) al que se agranda la foto antes de leerla
 UMBRAL_CONFIANZA_AVISO = 60  # por debajo de esto, la fila se marca para revisión en la UI
 
 
@@ -92,14 +93,15 @@ def _requerir_pytesseract():
 
 def preprocesar_imagen(path: str) -> Image.Image:
     img = Image.open(path).convert("L")  # escala de grises
-
-    # Upscale si la imagen es chica, ayuda a Tesseract con fuentes pequeñas
-    if max(img.size) < 1600:
-        factor = 1600 / max(img.size)
-        img = img.resize((int(img.width * factor), int(img.height * factor)), Image.LANCZOS)
-
     img = ImageOps.autocontrast(img)
+    # Enderezar ANTES de agrandar: medido contra fotos reales de planillas
+    # (scripts/ocr_benchmark.py), este orden y agrandar a 2000 px de lado largo leyeron 42 de
+    # 104 pacientes contra 29 del preprocesado anterior (1600 px, enderezar después), y con
+    # menos filas basura. Agrandar más (2800) suma basura; "tessdata_best" leyó peor que "fast".
     img = _deskew(img)
+    if max(img.size) < LADO_OCR:
+        factor = LADO_OCR / max(img.size)
+        img = img.resize((int(img.width * factor), int(img.height * factor)), Image.LANCZOS)
     # No binarizamos: validado contra fotos reales, Tesseract con su propia binarización
     # adaptativa interna lee mejor que forzando nosotros un threshold fijo.
     return img
