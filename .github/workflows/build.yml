@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Instalar Pillow (lo usan las pruebas del OCR)
-        run: pip install pillow
+        run: pip install pillow customtkinter
       - name: Pruebas de regresión (estados de clientes y config del OCR)
         run: python -m unittest discover -s tests -v
       - name: La versión del código tiene que coincidir con el tag
