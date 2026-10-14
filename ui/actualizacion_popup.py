@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 import version
+from ui import tema
 
 
 class ActualizacionPopup(tk.Toplevel):
@@ -21,7 +22,7 @@ class ActualizacionPopup(tk.Toplevel):
         self.estado_label.pack(padx=20, pady=20)
 
         self.progreso = ttk.Progressbar(self, length=280, mode="determinate")
-        self.actualizar_btn = tk.Button(self, text="Actualizar ahora", command=self._actualizar_ahora)
+        self.actualizar_btn = tema.primario(tk.Button(self, text="Actualizar ahora", command=self._actualizar_ahora))
         self.btn_frame = tk.Frame(self)
         self.cerrar_btn = tk.Button(self.btn_frame, text="Más tarde", command=self.destroy, width=12)
 

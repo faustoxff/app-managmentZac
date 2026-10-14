@@ -97,41 +97,65 @@ def aplicar_tema_ttk(root: tk.Misc) -> None:
         )
 
 
-def _descendientes(w):
-    for hijo in w.winfo_children():
-        yield hijo
-        yield from _descendientes(hijo)
+def instalar_opciones(root: tk.Misc) -> None:
+    """Colores y letra de Z2 para TODOS los controles clásicos de Tkinter (los de todas las
+    ventanas), vía la base de opciones de Tk: se aplica a cada control que se cree después,
+    incluidos los que aparecen sobre la marcha (filas que se agregan, avisos que se muestran
+    más tarde). Lo que el código ya pone a mano (por ejemplo un color de aviso) se respeta.
+
+    Los botones secundarios van celeste suave en vez de blanco con borde: en Windows los
+    botones clásicos no dibujan un borde de color, y blanco sobre el fondo casi blanco no se
+    vería como botón."""
+    o = root.option_add
+    for clase in ("Toplevel", "Frame", "Canvas", "Labelframe"):
+        o(f"*{clase}.background", FONDO)
+    o("*Canvas.highlightThickness", 0)
+    o("*Label.background", FONDO)
+    o("*Label.foreground", TEXTO_BOTON)
+    o("*Label.font", (FAMILIA, 10))
+    for clase in ("Checkbutton", "Radiobutton"):
+        o(f"*{clase}.background", FONDO)
+        o(f"*{clase}.activeBackground", FONDO)
+        o(f"*{clase}.foreground", TEXTO_BOTON)
+        o(f"*{clase}.font", (FAMILIA, 10))
+    for clase in ("Entry", "Text", "Listbox", "Spinbox"):
+        o(f"*{clase}.background", PANEL)
+        o(f"*{clase}.foreground", TEXTO)
+        o(f"*{clase}.relief", "flat")
+        o(f"*{clase}.borderWidth", 0)
+        o(f"*{clase}.highlightThickness", 1)
+        o(f"*{clase}.highlightBackground", LINEA_FUERTE)
+        o(f"*{clase}.highlightColor", ACENTO)
+        o(f"*{clase}.selectBackground", ACENTO)
+        o(f"*{clase}.selectForeground", "#ffffff")
+        o(f"*{clase}.font", (FAMILIA, 11))
+    o("*Entry.insertBackground", TEXTO)
+    o("*Text.insertBackground", TEXTO)
+    o("*Button.background", ACENTO_SUAVE)
+    o("*Button.foreground", ACENTO_OSCURO)
+    o("*Button.activeBackground", LINEA)
+    o("*Button.activeForeground", ACENTO_OSCURO)
+    o("*Button.relief", "flat")
+    o("*Button.borderWidth", 0)
+    o("*Button.highlightThickness", 0)
+    o("*Button.font", (FAMILIA, 10, "bold"))
+    o("*Button.padX", 12)
+    o("*Button.padY", 5)
+    o("*Button.cursor", "hand2")
+    o("*Menu.background", PANEL)
+    o("*Menu.foreground", TEXTO)
+    o("*Menu.activeBackground", ACENTO_SUAVE)
+    o("*Menu.activeForeground", ACENTO_OSCURO)
+    o("*Menu.font", (FAMILIA, 10))
 
 
-def estilizar_clasico(ventana, primarios=(), peligro=()):
-    """Pinta con la paleta de Z2 una ventana hecha con los controles clásicos de Tkinter, sin
-    reemplazarlos. Sirve para formularios donde el manejo de teclado y foco depende de esos
-    controles (en CustomTkinter el foco queda en un widget interno y Enter no llega al botón)."""
-    colores_por_defecto = {"black", "#000000", "SystemButtonText", "SystemWindowText"}
-    ventana.configure(bg=FONDO)
-    for w in _descendientes(ventana):
-        clase = w.winfo_class()
-        if clase == "Frame":
-            w.configure(bg=FONDO)
-        elif clase == "Label":
-            opciones = {"bg": FONDO, "font": (FAMILIA, 10)}
-            if str(w.cget("fg")) in colores_por_defecto:
-                opciones["fg"] = TEXTO_BOTON
-            if str(w.cget("relief")) == "sunken":
-                opciones.update(bg=PANEL, relief="flat", highlightthickness=1, highlightbackground=LINEA_FUERTE)
-            w.configure(**opciones)
-        elif clase in ("Entry", "Text"):
-            w.configure(
-                relief="flat", bg=PANEL, fg=TEXTO, insertbackground=TEXTO, font=(FAMILIA, 11),
-                highlightthickness=1, highlightbackground=LINEA_FUERTE, highlightcolor=ACENTO,
-            )
-        elif clase == "Button":
-            if w in primarios or w in peligro:
-                color, oscuro = (PELIGRO, "#912018") if w in peligro else (ACENTO, ACENTO_OSCURO)
-                w.configure(bg=color, fg="#ffffff", activebackground=oscuro, activeforeground="#ffffff")
-            else:
-                w.configure(
-                    bg=PANEL, fg=TEXTO_BOTON, activebackground=ACENTO_SUAVE, activeforeground=ACENTO_OSCURO,
-                    highlightbackground=LINEA_FUERTE,
-                )
-            w.configure(relief="flat", bd=0, font=(FAMILIA, 10, "bold"), padx=12, pady=5, cursor="hand2")
+def primario(boton: tk.Button) -> tk.Button:
+    """Botón de la acción principal de una ventana (Guardar, Aplicar...): turquesa de Z2."""
+    boton.configure(bg=ACENTO, fg="#ffffff", activebackground=ACENTO_OSCURO, activeforeground="#ffffff")
+    return boton
+
+
+def peligro(boton: tk.Button) -> tk.Button:
+    """Botón de una acción que borra o pisa datos: rojo de Z2."""
+    boton.configure(bg=PELIGRO, fg="#ffffff", activebackground="#912018", activeforeground="#ffffff")
+    return boton

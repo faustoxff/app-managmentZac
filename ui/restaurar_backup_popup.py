@@ -1,6 +1,7 @@
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
+from ui import tema
 
 
 class RestaurarBackupPopup(tk.Toplevel):
@@ -45,6 +46,7 @@ class RestaurarBackupPopup(tk.Toplevel):
         self.restaurar_btn = tk.Button(
             btn_frame, text="Restaurar este backup", command=self._restaurar, width=18
         )
+        tema.peligro(self.restaurar_btn)
         self.restaurar_btn.pack(side="left", padx=6)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=6)
 

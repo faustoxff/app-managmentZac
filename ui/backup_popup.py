@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 import config
+from ui import tema
 
 
 class BackupPopup(tk.Toplevel):
@@ -40,7 +41,7 @@ class BackupPopup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=16)
-        tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12).pack(side="left", padx=4)
+        tema.primario(tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12)).pack(side="left", padx=4)
         self.backup_btn = tk.Button(
             btn_frame, text="Backup ahora", command=self._backup_ahora, width=13
         )

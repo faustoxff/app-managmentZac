@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 import config
+from ui import tema
 
 
 class IntegracionZ2Popup(tk.Toplevel):
@@ -55,7 +56,7 @@ class IntegracionZ2Popup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=16)
-        tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12).pack(
+        tema.primario(tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12)).pack(
             side="left", padx=4
         )
         self.probar_btn = tk.Button(

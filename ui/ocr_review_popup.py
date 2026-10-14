@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from db import FilaImport
+from ui import tema
 
 # Duplicado a propósito del mismo valor en ocr_import.py: este popup no debe depender de ese
 # módulo (que exige Pillow/pytesseract instalados) solo para leer una constante — se abre
@@ -61,16 +62,23 @@ class OcrReviewPopup(tk.Toplevel):
             for c in candidatos:
                 self._agregar_fila(c.nombre, c.contacto, c.confianza_nombre, c.confianza_telefono)
 
-        tk.Button(self, text="+ Agregar fila", command=lambda: self._agregar_fila()).pack(
-            padx=12, pady=(0, 6), anchor="w"
-        )
-
         btn_frame = tk.Frame(self)
-        btn_frame.pack(pady=(0, 12))
-        tk.Button(btn_frame, text="Confirmar importación", command=self._confirmar, width=20).pack(
+        # Los botones se empaquetan ABAJO y antes que la lista: así siempre reservan su lugar, y si
+        # la pantalla es chica se achica la lista (que tiene barra), no desaparecen los botones.
+        btn_frame.pack(side="bottom", pady=(0, 12), before=contenedor)
+        tk.Button(self, text="+ Agregar fila", command=lambda: self._agregar_fila()).pack(
+            side="bottom", padx=12, pady=(0, 6), anchor="w", before=contenedor
+        )
+        tema.primario(tk.Button(btn_frame, text="Confirmar importación", command=self._confirmar, width=20)).pack(
             side="left", padx=6
         )
         tk.Button(btn_frame, text="Cancelar", command=self._cerrar, width=14).pack(side="left", padx=6)
+
+        # Alto justo para ver todas las filas sin bajar, medido con la letra real (una estimación
+        # fija por fila quedaba corta al cambiar la letra), sin pasarse de la pantalla.
+        self.update_idletasks()
+        necesario = self.winfo_reqheight() - canvas.winfo_reqheight() + self.filas_frame.winfo_reqheight() + 12
+        self.geometry(f"560x{max(420, min(necesario, self.winfo_screenheight() - 120))}")
 
     @staticmethod
     def _es_dudosa(confianza) -> bool:

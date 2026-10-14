@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import colorchooser, messagebox, ttk
 
 import db
+from ui import tema
 
 
 class EstadosPopup(tk.Toplevel):
@@ -23,7 +24,7 @@ class EstadosPopup(tk.Toplevel):
 
         tk.Button(self, text="Nuevo", command=self._nuevo, width=12).grid(row=1, column=0, pady=6)
         tk.Button(self, text="Editar", command=self._editar, width=12).grid(row=1, column=1, pady=6)
-        tk.Button(self, text="Borrar", command=self._borrar, width=12).grid(row=1, column=2, pady=6)
+        tema.peligro(tk.Button(self, text="Borrar", command=self._borrar, width=12)).grid(row=1, column=2, pady=6)
 
         tk.Button(self, text="Cerrar", command=self._cerrar, width=12).grid(
             row=2, column=0, columnspan=3, pady=(0, 10)
@@ -113,7 +114,7 @@ class EstadosPopup(tk.Toplevel):
             dialogo.destroy()
             self._cargar()
 
-        tk.Button(dialogo, text="Guardar", command=guardar, width=12).grid(
+        tema.primario(tk.Button(dialogo, text="Guardar", command=guardar, width=12)).grid(
             row=2, column=0, columnspan=2, pady=10
         )
 

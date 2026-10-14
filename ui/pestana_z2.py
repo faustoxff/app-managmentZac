@@ -16,6 +16,7 @@ from tkinter import messagebox, ttk
 import config
 import db
 import z2_sync
+from ui import tema
 
 
 class PestanaZ2(tk.Toplevel):
@@ -33,7 +34,7 @@ class PestanaZ2(tk.Toplevel):
         self._cargando = False
 
         self.title("Contactos de Z2 (carpetas ART) — solo consulta")
-        self.geometry("920x520")
+        self.geometry("1120x560")
         self.transient(master)
 
         self._construir()
@@ -61,9 +62,9 @@ class PestanaZ2(tk.Toplevel):
         )
         self.reco_combo.pack(side="left", padx=(4, 12))
 
-        self.sincronizar_btn = tk.Button(
+        self.sincronizar_btn = tema.primario(tk.Button(
             barra, text="Sincronizar con Z2", command=self._sincronizar
-        )
+        ))
         self.sincronizar_btn.pack(side="left", padx=4)
         tk.Button(barra, text="Comparar con Z1", command=self._comparar).pack(side="left", padx=4)
         tk.Button(barra, text="Cerrar", command=self.destroy).pack(side="right", padx=8, pady=5)
@@ -110,7 +111,7 @@ class PestanaZ2(tk.Toplevel):
         # toca nada de Z2, y que traer un cliente lo carga en Z1.
         pie = tk.Frame(self)
         pie.pack(fill="x", padx=8, pady=(0, 8))
-        self.traer_btn = tk.Button(pie, text="Traer a Z1", command=self._traer, width=14)
+        self.traer_btn = tema.primario(tk.Button(pie, text="Traer a Z1", command=self._traer, width=14))
         self.traer_btn.pack(side="left")
         tk.Label(
             pie,

@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 import db
+from ui import tema
 
 
 class RestaurarBackupLocalPopup(tk.Toplevel):
@@ -47,7 +48,7 @@ class RestaurarBackupLocalPopup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=16)
-        tk.Button(btn_frame, text="Restaurar esta fecha", command=self._restaurar, width=18).pack(
+        tema.peligro(tk.Button(btn_frame, text="Restaurar esta fecha", command=self._restaurar, width=18)).pack(
             side="left", padx=6
         )
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=6)

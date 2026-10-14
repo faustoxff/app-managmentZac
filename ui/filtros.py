@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 import db
+from ui import tema
 
 
 class FiltrosPopup(tk.Toplevel):
@@ -69,7 +70,7 @@ class FiltrosPopup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.grid(row=8, column=0, columnspan=2, pady=10)
-        tk.Button(btn_frame, text="Aplicar", command=self._aplicar, width=12).pack(side="left", padx=5)
+        tema.primario(tk.Button(btn_frame, text="Aplicar", command=self._aplicar, width=12)).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Limpiar", command=self._limpiar, width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Cerrar", command=self.destroy, width=12).pack(side="left", padx=5)
 

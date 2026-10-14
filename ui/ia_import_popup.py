@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from ui.api_key_popup import ApiKeyPopup
+from ui import tema
 
 
 class IAImportPopup(tk.Toplevel):
@@ -43,7 +44,7 @@ class IAImportPopup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=(8, 16))
-        self.enviar_btn = tk.Button(btn_frame, text="Enviar", command=self._enviar, width=14)
+        self.enviar_btn = tema.primario(tk.Button(btn_frame, text="Enviar", command=self._enviar, width=14))
         self.enviar_btn.pack(side="left", padx=6)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=14).pack(side="left", padx=6)
 

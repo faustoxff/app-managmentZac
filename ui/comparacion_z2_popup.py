@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 
 import db
 from ui.seleccion_teclado import habilitar_shift_flechas
+from ui import tema
 
 
 class ComparacionZ2Popup(tk.Toplevel):
@@ -61,7 +62,7 @@ class ComparacionZ2Popup(tk.Toplevel):
         ttk.Combobox(
             acciones, textvariable=self.estado_var, values=nombres, state="readonly", width=16
         ).pack(side="left", padx=6)
-        tk.Button(acciones, text="Cambiar estado", command=self._cambiar_estado).pack(side="left")
+        tema.primario(tk.Button(acciones, text="Cambiar estado", command=self._cambiar_estado)).pack(side="left")
         tk.Button(acciones, text="Cerrar", command=self.destroy, width=12).pack(side="right")
 
         for tecla in ("<Control-a>", "<Control-A>"):

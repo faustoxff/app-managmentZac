@@ -43,6 +43,7 @@ class App(ctk.CTk):
         # actualización o instalación manual.
         self.title(f"Gestor de Contactos — v{version.__version__}")
         self.geometry("1180x640")
+        tema.instalar_opciones(self)
         tema.aplicar_tema_ttk(self)
         self.configure(fg_color=tema.FONDO)
         self.minsize(760, 420)

@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 
 import db
 from models import Cliente
+from ui import tema
 
 COLOR_AVISO = "#fff3cd"
 
@@ -91,7 +92,7 @@ class EditarLotePopup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=(0, 12))
-        tk.Button(btn_frame, text="Guardar cambios", command=self._guardar_todo, width=16).pack(
+        tema.primario(tk.Button(btn_frame, text="Guardar cambios", command=self._guardar_todo, width=16)).pack(
             side="left", padx=6
         )
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=6)
@@ -110,7 +111,7 @@ class EditarLotePopup(tk.Toplevel):
         e_contacto = tk.Entry(fila_frame, textvariable=contacto_var, width=14)
         e_contacto.pack(side="left", padx=2)
         combo_estado = ttk.Combobox(
-            fila_frame, textvariable=estado_var, values=self.nombres_estados, state="readonly", width=10
+            fila_frame, textvariable=estado_var, values=self.nombres_estados, state="readonly", width=13
         )
         combo_estado.pack(side="left", padx=2)
         e_recomendado = tk.Entry(fila_frame, textvariable=recomendado_var, width=18)

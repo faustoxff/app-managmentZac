@@ -8,6 +8,8 @@ openai>=1.50
 psycopg2-binary>=2.9  # sincronización con Neon (opcional, no rompe nada si no se configura)
 certifi>=2024.0  # certificados raíz para HTTPS en updater.py (ver comentario ahí)
 
+customtkinter>=5.2  # aspecto de la ventana principal (ver ui/tema.py)
+
 # Solo se necesita para generar el .exe:
 pyinstaller>=6.0
 

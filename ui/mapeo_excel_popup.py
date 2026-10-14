@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 import excel_import
+from ui import tema
 
 CAMPOS = [
     ("nombre", "Nombre *", True),
@@ -43,7 +44,7 @@ class MapeoColumnasPopup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.grid(row=len(CAMPOS) + 1, column=0, columnspan=2, pady=12)
-        tk.Button(btn_frame, text="Importar", command=self._confirmar, width=14).pack(side="left", padx=6)
+        tema.primario(tk.Button(btn_frame, text="Importar", command=self._confirmar, width=14)).pack(side="left", padx=6)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=14).pack(side="left", padx=6)
 
     def _confirmar(self):

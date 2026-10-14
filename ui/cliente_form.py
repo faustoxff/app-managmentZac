@@ -70,7 +70,10 @@ class ClienteForm(tk.Toplevel):
         recordatorio_frame = tk.Frame(self)
         recordatorio_frame.grid(row=4, column=1, sticky="w", **pad)
         self._recordatorio_fecha = cliente.fecha_recordatorio if cliente else ""
-        self.recordatorio_label = tk.Label(recordatorio_frame, text="", width=24, anchor="w", relief="sunken")
+        self.recordatorio_label = tk.Label(
+            recordatorio_frame, text="", width=24, anchor="w", bg=tema.PANEL,
+            highlightthickness=1, highlightbackground=tema.LINEA_FUERTE,
+        )
         self.recordatorio_label.pack(side="left")
         tk.Button(recordatorio_frame, text="ELEGIR FECHA", command=self._elegir_recordatorio).pack(
             side="left", padx=(4, 0)
@@ -129,7 +132,7 @@ class ClienteForm(tk.Toplevel):
         self.guardado_label = tk.Label(self, text="", fg="#16a34a")
         self.guardado_label.grid(row=7, column=0, columnspan=2, pady=(4, 8))
 
-        tema.estilizar_clasico(self, primarios=[self.guardar_btn])
+        tema.primario(self.guardar_btn)
         self.nombre_entry.focus_set()
 
     def _tab_a_guardar(self, event):

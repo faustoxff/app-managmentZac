@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 import config
+from ui import tema
 
 
 class ApiKeyPopup(tk.Toplevel):
@@ -46,7 +47,7 @@ class ApiKeyPopup(tk.Toplevel):
 
         btn_frame = tk.Frame(self)
         btn_frame.pack(pady=(8, 16))
-        tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12).pack(side="left", padx=6)
+        tema.primario(tk.Button(btn_frame, text="Guardar", command=self._guardar, width=12)).pack(side="left", padx=6)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=6)
 
     def _guardar(self):
