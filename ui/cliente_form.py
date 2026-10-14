@@ -7,6 +7,7 @@ import db
 import z2_sync
 from models import Cliente
 from ui.calendario_popup import CalendarioPopup
+from ui import tema
 from ui.duplicado_popup import DuplicadoPopup
 from ui.panel_duplicados import PanelDuplicados
 
@@ -71,7 +72,7 @@ class ClienteForm(tk.Toplevel):
         self._recordatorio_fecha = cliente.fecha_recordatorio if cliente else ""
         self.recordatorio_label = tk.Label(recordatorio_frame, text="", width=24, anchor="w", relief="sunken")
         self.recordatorio_label.pack(side="left")
-        tk.Button(recordatorio_frame, text="📅", width=3, command=self._elegir_recordatorio).pack(
+        tk.Button(recordatorio_frame, text="ELEGIR FECHA", command=self._elegir_recordatorio).pack(
             side="left", padx=(4, 0)
         )
         self._refrescar_label_recordatorio()
@@ -128,6 +129,7 @@ class ClienteForm(tk.Toplevel):
         self.guardado_label = tk.Label(self, text="", fg="#16a34a")
         self.guardado_label.grid(row=7, column=0, columnspan=2, pady=(4, 8))
 
+        tema.estilizar_clasico(self, primarios=[self.guardar_btn])
         self.nombre_entry.focus_set()
 
     def _tab_a_guardar(self, event):

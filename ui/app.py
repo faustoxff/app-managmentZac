@@ -1,6 +1,8 @@
 import queue
 import threading
 import tkinter as tk
+
+import customtkinter as ctk
 from datetime import date, datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -21,6 +23,7 @@ from ui.mapeo_excel_popup import MapeoColumnasPopup
 from ui.ocr_review_popup import OcrReviewPopup
 from ui.restaurar_backup_local_popup import RestaurarBackupLocalPopup
 from ui.seleccion_teclado import habilitar_shift_flechas
+from ui import tema
 from ui.resumen_import_popup import ResumenImportPopup
 from ui.subida_celular_popup import SubidaCelularPopup
 
@@ -30,7 +33,7 @@ CHEQUEO_Z2_CADA_MS = 3 * 60 * 60 * 1000
 CHEQUEO_Z2_REINTENTO_MS = 2 * 60 * 1000
 
 
-class App(tk.Tk):
+class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         # Visible siempre, sin depender de internet ni de entrar a ningún menú — antes la
@@ -39,7 +42,9 @@ class App(tk.Tk):
         # distancia si un usuario estaba realmente corriendo la versión nueva después de una
         # actualización o instalación manual.
         self.title(f"Gestor de Contactos — v{version.__version__}")
-        self.geometry("980x560")
+        self.geometry("1180x640")
+        tema.aplicar_tema_ttk(self)
+        self.configure(fg_color=tema.FONDO)
         self.minsize(760, 420)
 
         self.filtros: dict = {}
@@ -283,56 +288,59 @@ class App(tk.Tk):
         ActualizacionPopup(self)
 
     def _build_toolbar(self):
-        bar = tk.Frame(self, pady=8, padx=8)
-        bar.pack(fill="x")
+        # Fila 1: acciones sobre los contactos, a la derecha Z2 y exportar.
+        barra = ctk.CTkFrame(self, fg_color=tema.PANEL, corner_radius=0)
+        barra.pack(fill="x")
+        fila1 = ctk.CTkFrame(barra, fg_color="transparent")
+        fila1.pack(fill="x", padx=12, pady=(10, 6))
+        tema.boton(fila1, "Nuevo contacto", self._nuevo_cliente, primario=True).pack(side="left", padx=(0, 6))
+        for texto, comando in (
+            ("Editar", self._editar_cliente),
+            ("Editar seleccionados", self._editar_seleccionados),
+            ("Imprimir seleccionados", self._imprimir),
+            ("Estados", self._abrir_estados),
+        ):
+            tema.boton(fila1, texto, comando).pack(side="left", padx=3)
+        tema.boton(fila1, "Borrar", self._borrar_cliente, peligro=True).pack(side="left", padx=3)
+        tema.boton(fila1, "Exportar Excel", self._exportar_excel).pack(side="right", padx=3)
+        tema.boton(fila1, "Pestaña Z2", self._abrir_pestana_z2).pack(side="right", padx=3)
 
-        tk.Button(bar, text="Nuevo contacto", command=self._nuevo_cliente).pack(side="left", padx=4)
-        tk.Button(bar, text="Editar", command=self._editar_cliente).pack(side="left", padx=4)
-        tk.Button(bar, text="Borrar", command=self._borrar_cliente).pack(side="left", padx=4)
-        tk.Button(bar, text="Filtros", command=self._abrir_filtros).pack(side="left", padx=4)
-        self.limpiar_filtro_btn = tk.Button(
-            bar, text="Limpiar filtro", command=self._limpiar_filtro, state="disabled"
-        )
-        self.limpiar_filtro_btn.pack(side="left", padx=(0, 4))
-        tk.Button(bar, text="Estados", command=self._abrir_estados).pack(side="left", padx=4)
-        tk.Button(bar, text="Imprimir seleccionados", command=self._imprimir).pack(side="left", padx=4)
-        tk.Button(bar, text="Editar seleccionados", command=self._editar_seleccionados).pack(
-            side="left", padx=4
-        )
-
-        # Empaquetados a la derecha en orden inverso al visual: el último en este bloque
-        # queda más a la izquierda. Orden visual resultante (izq -> der): Subida por celular,
-        # Importar Excel, Importar por foto, Importar con IA, Pestaña Z2, Exportar Excel.
-        tk.Button(bar, text="Exportar Excel", command=self._exportar_excel).pack(side="right", padx=4)
-        tk.Button(bar, text="Pestaña Z2", command=self._abrir_pestana_z2).pack(side="right", padx=4)
-        tk.Button(bar, text="Importar con IA", command=self._importar_ia).pack(side="right", padx=4)
-        tk.Button(bar, text="Importar por foto", command=self._importar_foto).pack(side="right", padx=4)
-        tk.Button(bar, text="Importar Excel", command=self._importar_excel).pack(side="right", padx=4)
-        self.subida_btn = tk.Button(
-            bar, text="Subida por celular", command=self._toggle_subida_celular
-        )
-        self.subida_btn.pack(side="right", padx=4)
-
-        busqueda_frame = tk.Frame(self, pady=(0), padx=8)
-        busqueda_frame.pack(fill="x")
-        tk.Label(busqueda_frame, text="Buscar:").pack(side="left")
+        # Fila 2: búsqueda y filtros; a la derecha, las importaciones.
+        fila2 = ctk.CTkFrame(barra, fg_color="transparent")
+        fila2.pack(fill="x", padx=12, pady=(0, 10))
         self.busqueda_var = tk.StringVar()
         self.busqueda_var.trace_add("write", self._on_busqueda_tecla)
-        tk.Entry(busqueda_frame, textvariable=self.busqueda_var, width=30).pack(
-            side="left", padx=(6, 0)
+        ctk.CTkLabel(fila2, text="BUSCAR", font=tema.fuente(11, negrita=True), text_color=tema.APAGADO).pack(
+            side="left", padx=(0, 8)
         )
-        tk.Button(
-            busqueda_frame, text="✕", command=self._limpiar_busqueda, width=2, fg="gray30"
-        ).pack(side="left", padx=(2, 0))
-        tk.Label(
-            busqueda_frame, text="(nombre o teléfono — convive con el popup de Filtros)", fg="gray40"
-        ).pack(side="left", padx=(8, 0))
+        tema.campo(fila2, self.busqueda_var, ancho=260).pack(side="left")
+        tema.boton(fila2, "✕", self._limpiar_busqueda, width=32).pack(side="left", padx=(4, 12))
+        tema.boton(fila2, "Filtros", self._abrir_filtros).pack(side="left", padx=3)
+        self.limpiar_filtro_btn = tema.boton(fila2, "Limpiar filtro", self._limpiar_filtro, state="disabled")
+        self.limpiar_filtro_btn.pack(side="left", padx=3)
+        # Empaquetados a la derecha en orden inverso al visual.
+        for texto, comando in (
+            ("Importar con IA", self._importar_ia),
+            ("Importar por foto", self._importar_foto),
+            ("Importar Excel", self._importar_excel),
+        ):
+            tema.boton(fila2, texto, comando).pack(side="right", padx=3)
+        self.subida_btn = tema.boton(fila2, "Subida por celular", self._toggle_subida_celular)
+        self.subida_btn.pack(side="right", padx=3)
 
-        estado_frame = tk.Frame(self)
-        estado_frame.pack(fill="x")
-        self.filtros_label = tk.Label(estado_frame, text="", fg="gray20", anchor="w", padx=8)
+        tk.Frame(self, height=1, bg=tema.LINEA).pack(fill="x")
+
+        estado_frame = tk.Frame(self, bg=tema.FONDO)
+        estado_frame.pack(fill="x", pady=(6, 4))
+        self.filtros_label = tk.Label(
+            estado_frame, text="", fg=tema.APAGADO, bg=tema.FONDO, anchor="w", padx=14,
+            font=(tema.FAMILIA, 10),
+        )
         self.filtros_label.pack(side="left", fill="x", expand=True)
-        self.seleccion_label = tk.Label(estado_frame, text="", fg="#2563eb", anchor="e", padx=8)
+        self.seleccion_label = tk.Label(
+            estado_frame, text="", fg=tema.ACENTO_OSCURO, bg=tema.FONDO, anchor="e", padx=14,
+            font=(tema.FAMILIA, 10, "bold"),
+        )
         self.seleccion_label.pack(side="right")
 
     # Ancho mínimo y máximo (en píxeles) que puede tomar cada columna al autoajustarse al
@@ -353,15 +361,15 @@ class App(tk.Tk):
 
     def _build_table(self):
         cols = ("nombre", "contacto", "estado", "fecha_alta", "fecha", "recomendado_por", "recordatorio", "notas")
-        frame = tk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        frame = tk.Frame(self, bg=tema.FONDO)
+        frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
         # La barra horizontal se empaqueta ANTES que el contenedor de la tabla para que reserve
         # su espacio abajo del todo — el contenedor (fill="both", expand=True) ocupa el resto.
         hsb = ttk.Scrollbar(frame, orient="horizontal")
         hsb.pack(side="bottom", fill="x")
 
-        tree_container = tk.Frame(frame)
+        tree_container = tk.Frame(frame, bg=tema.FONDO)
         tree_container.pack(fill="both", expand=True)
 
         self.tree = ttk.Treeview(tree_container, columns=cols, show="headings", selectmode="extended")
@@ -413,7 +421,10 @@ class App(tk.Tk):
         tener que agrandar todas las demás columnas a lo bestia."""
         import tkinter.font as tkfont
 
-        fuente = tkfont.nametofont("TkDefaultFont")
+        # Se mide con la misma letra que usa la tabla (la del tema), no con la de Tk por
+        # defecto: si no, una letra más ancha corta textos como "NO CONTESTA".
+        fuente_tabla = ttk.Style(self).lookup("Treeview", "font")
+        fuente = tkfont.Font(font=fuente_tabla) if fuente_tabla else tkfont.nametofont("TkDefaultFont")
         columnas = self.tree["columns"]
         atributo_por_columna = {
             "nombre": "nombre",
@@ -706,7 +717,7 @@ class App(tk.Tk):
         return self._hay_filtro_popup_activo() or bool(self.busqueda_rapida)
 
     def _actualizar_boton_limpiar_filtro(self):
-        self.limpiar_filtro_btn.config(state="normal" if self._hay_filtro_popup_activo() else "disabled")
+        self.limpiar_filtro_btn.configure(state="normal" if self._hay_filtro_popup_activo() else "disabled")
 
     # ---------- ordenar al clickear un encabezado ----------
 
@@ -1013,7 +1024,7 @@ class App(tk.Tk):
 
         self.photo_server = servidor
         self._subida_ip, self._subida_puerto = ip, puerto
-        self.subida_btn.config(text="Subida por celular (activa)")
+        self.subida_btn.configure(text="SUBIDA POR CELULAR (ACTIVA)")
 
         SubidaCelularPopup(self, ip, puerto, on_desactivar=self._desactivar_subida_celular)
         self._revisar_cola_fotos()
@@ -1049,7 +1060,7 @@ class App(tk.Tk):
             self.photo_server.detener()
         self.photo_server = None
         self.cola_fotos = None
-        self.subida_btn.config(text="Subida por celular")
+        self.subida_btn.configure(text="SUBIDA POR CELULAR")
 
     def _revisar_cola_fotos(self):
         if self.cola_fotos is not None and self.ocr_popup_activo is None and not self._ocr_en_progreso:

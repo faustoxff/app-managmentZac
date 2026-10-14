@@ -97,11 +97,11 @@ class TestBotonLimpiarFiltroYSeleccion(BaseDB):
     def test_boton_limpiar_filtro_se_habilita_y_limpia(self):
         app = self._app()
         try:
-            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "disabled")
+            self.assertEqual(str(app.limpiar_filtro_btn.cget("state")), "disabled")
             app._aplicar_filtros({"recomendado_por": "ARA"})
-            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "normal")
+            self.assertEqual(str(app.limpiar_filtro_btn.cget("state")), "normal")
             app._limpiar_filtro()
-            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "disabled")
+            self.assertEqual(str(app.limpiar_filtro_btn.cget("state")), "disabled")
             self.assertEqual(app.filtros, {})
         finally:
             app.destroy()
@@ -110,7 +110,7 @@ class TestBotonLimpiarFiltroYSeleccion(BaseDB):
         app = self._app()
         try:
             app._aplicar_filtros({"estado_nombre": "(Todos)"})
-            self.assertEqual(str(app.limpiar_filtro_btn["state"]), "disabled")
+            self.assertEqual(str(app.limpiar_filtro_btn.cget("state")), "disabled")
         finally:
             app.destroy()
 
