@@ -32,7 +32,7 @@ class ResumenImportPopup(tk.Toplevel):
         self.tree = ttk.Treeview(tabla, columns=cols, show="headings", height=16, selectmode="extended")
         for c, label, width in [
             ("nombre", "Nombre nuevo", 170),
-            ("contacto", "Contacto nuevo", 130),
+            ("contacto", "Teléfono nuevo", 130),
             ("existente", "Ya existe como", 320),
         ]:
             self.tree.heading(c, text=label)

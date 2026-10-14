@@ -21,7 +21,7 @@ class EditarLotePopup(tk.Toplevel):
         self.nombres_estados = [e.nombre for e in self.estados]
         self.hubo_cambios = False
 
-        self.title(f"Editar seleccionados ({len(clientes)} clientes)")
+        self.title(f"Editar seleccionados ({len(clientes)} contactos)")
         self.resizable(False, False)
         self.transient(master)
         self.grab_set()
@@ -29,7 +29,7 @@ class EditarLotePopup(tk.Toplevel):
         tk.Label(
             self,
             text="Editá lo que necesites y guardá todo junto. Las filas en amarillo tienen un "
-            "posible duplicado con otro cliente y no se guardan solas.",
+            "posible duplicado con otro contacto y no se guardan solas.",
             wraplength=560,
             justify="left",
         ).pack(padx=12, pady=(12, 6), anchor="w")
@@ -211,7 +211,7 @@ class EditarLotePopup(tk.Toplevel):
             messagebox.showwarning(
                 "Revisar duplicados",
                 f"{pendientes} fila(s) marcadas en amarillo tienen un posible duplicado con "
-                "otro cliente y no se guardaron. Usá 'Guardar igual' en esa fila si igual "
+                "otro contacto y no se guardaron. Usá 'Guardar igual' en esa fila si igual "
                 "querés cargarlo así, o corregí el dato.",
                 parent=self,
             )

@@ -23,7 +23,7 @@ PAGINA_SUBIDA = """<!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Subir foto - Gestor de Clientes</title>
+<title>Subir foto - Gestor de Contactos</title>
 <style>
   body { font-family: sans-serif; padding: 24px; text-align: center; background: #f5f5f5; }
   h1 { font-size: 1.2rem; }

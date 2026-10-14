@@ -137,7 +137,7 @@ def exportar_excel(path: str, clientes) -> None:
     """Exporta la vista actual (ya filtrada por el llamador) a un .xlsx."""
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Clientes"
+    ws.title = "Contactos"
     ws.append(
         ["Nombre", "Teléfono", "Estado", "Fecha de alta", "Fecha de actualización", "Notas", "Recomendado por"]
     )

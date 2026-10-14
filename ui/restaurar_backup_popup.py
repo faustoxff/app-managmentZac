@@ -55,7 +55,7 @@ class RestaurarBackupPopup(tk.Toplevel):
         nombre = sel[0]
         if not messagebox.askyesno(
             "Confirmar restauración",
-            f"¿Restaurar '{nombre}'?\n\nEsto reemplaza TODOS los clientes que tenés cargados "
+            f"¿Restaurar '{nombre}'?\n\nEsto reemplaza TODOS los contactos que tenés cargados "
             "ahora en esta PC por los del backup. No se puede deshacer.",
             parent=self,
         ):

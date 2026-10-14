@@ -24,6 +24,11 @@ from ui.resumen_import_popup import ResumenImportPopup
 from ui.subida_celular_popup import SubidaCelularPopup
 
 
+CHEQUEO_Z2_PRIMERO_MS = 60 * 1000
+CHEQUEO_Z2_CADA_MS = 3 * 60 * 60 * 1000
+CHEQUEO_Z2_REINTENTO_MS = 2 * 60 * 1000
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -32,7 +37,7 @@ class App(tk.Tk):
         # actualización" (que además necesita conexión), lo que hacía imposible confirmar a
         # distancia si un usuario estaba realmente corriendo la versión nueva después de una
         # actualización o instalación manual.
-        self.title(f"Gestor de Clientes — v{version.__version__}")
+        self.title(f"Gestor de Contactos — v{version.__version__}")
         self.geometry("980x560")
         self.minsize(760, 420)
 
@@ -63,6 +68,61 @@ class App(tk.Tk):
         # Bloq Mayús puesto (algo común en esta app, que fuerza nombres en mayúscula).
         self.bind_all("<Control-A>", self._atajo_nuevo_cliente)
         self._chequear_recordatorios()
+        # Un minuto después de abrir (para no frenar el arranque) y después cada tanto.
+        self.after(CHEQUEO_Z2_PRIMERO_MS, self._chequeo_z2_periodico)
+
+    # ---------- chequeo periódico contra Z2 ----------
+
+    def _chequeo_z2_periodico(self):
+        """Baja la copia de Z2 en segundo plano y avisa si hay clientes de Z1 que ya están
+        en Z2 y todavía no se le mostraron al usuario. Si Z2 no está configurado o no hay
+        internet, no avisa nada y lo vuelve a intentar en el próximo turno."""
+        self.after(CHEQUEO_Z2_CADA_MS, self._chequeo_z2_periodico)
+        if not config.obtener_z2_read_url().strip():
+            return
+
+        def trabajo():
+            import z2_sync
+
+            try:
+                z2_sync.sincronizar_copia_local()
+            except Exception as exc:  # noqa: BLE001 - es un chequeo de fondo, no molesta
+                db._log_diagnostico(f"chequeo periódico Z2: no se pudo sincronizar ({exc})")
+                return
+            try:
+                self.after(0, self._avisar_nuevos_en_z2)
+            except (tk.TclError, RuntimeError):
+                pass  # la app se cerró mientras tanto
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def _nuevos_en_z2(self) -> list[dict]:
+        """Coincidencias con Z2 que todavía no se avisaron. Los que se trajeron de Z2 no
+        cuentan: es obvio que están ahí."""
+        avisados = config.obtener_z2_avisados()
+        return [
+            r for r in db.comparar_z1_con_z2()
+            if r["cliente"].procedencia != "z2" and r["cliente"].id not in avisados
+        ]
+
+    def _avisar_nuevos_en_z2(self):
+        if not self.winfo_exists():
+            return
+        nuevos = self._nuevos_en_z2()
+        if not nuevos:
+            return
+        # No interrumpir: si hay otra ventana tomando el foco (por ejemplo cargando un
+        # cliente) o el aviso anterior sigue abierto, se avisa un rato después.
+        abierto = getattr(self, "_aviso_z2", None)
+        if self.grab_current() is not None or (abierto is not None and abierto.winfo_exists()):
+            self.after(CHEQUEO_Z2_REINTENTO_MS, self._avisar_nuevos_en_z2)
+            return
+        from ui.comparacion_z2_popup import ComparacionZ2Popup
+
+        self._aviso_z2 = ComparacionZ2Popup(
+            self, coincidencias=nuevos, titulo="Contactos que ya están en Z2", on_cambio=self._refrescar
+        )
+        config.agregar_z2_avisados([r["cliente"].id for r in nuevos])
 
     def _chequear_recordatorios(self):
         """A partir de las 8am, avisa una vez por día (por cliente) quién tiene recordatorio
@@ -119,7 +179,7 @@ class App(tk.Tk):
         # tocar nada de Z2 ni de esta base.
         consulta_menu = tk.Menu(menubar, tearoff=0)
         consulta_menu.add_command(
-            label="Clientes de Z2 (carpetas ART)", command=self._abrir_pestana_z2
+            label="Contactos de Z2 (carpetas ART)", command=self._abrir_pestana_z2
         )
         consulta_menu.add_command(
             label="Importados de Z2", command=self._abrir_importados_z2
@@ -140,7 +200,7 @@ class App(tk.Tk):
             "Versión vieja del programa",
             f"Estás usando la v{version.__version__}, pero tus datos ya fueron usados por la "
             f"v{db.version_vieja_detectada()}. Esta versión vieja puede desordenar los estados "
-            "de los clientes.\n\nCerrá el programa y abrí la versión más nueva "
+            "de los contactos.\n\nCerrá el programa y abrí la versión más nueva "
             "(Ayuda → Buscar actualización, o descargá el .exe de nuevo).",
             parent=self,
         )
@@ -219,7 +279,7 @@ class App(tk.Tk):
         bar = tk.Frame(self, pady=8, padx=8)
         bar.pack(fill="x")
 
-        tk.Button(bar, text="Nuevo cliente", command=self._nuevo_cliente).pack(side="left", padx=4)
+        tk.Button(bar, text="Nuevo contacto", command=self._nuevo_cliente).pack(side="left", padx=4)
         tk.Button(bar, text="Editar", command=self._editar_cliente).pack(side="left", padx=4)
         tk.Button(bar, text="Borrar", command=self._borrar_cliente).pack(side="left", padx=4)
         tk.Button(bar, text="Filtros", command=self._abrir_filtros).pack(side="left", padx=4)
@@ -300,7 +360,7 @@ class App(tk.Tk):
         self.tree = ttk.Treeview(tree_container, columns=cols, show="headings", selectmode="extended")
         self._encabezados_columna = {
             "nombre": "NOMBRE",
-            "contacto": "CONTACTO",
+            "contacto": "TELÉFONO",
             "estado": "ESTADO",
             "fecha_alta": "ALTA",
             "fecha": "MODIFICACIÓN",
@@ -335,9 +395,9 @@ class App(tk.Tk):
         if n == 0:
             self.seleccion_label.config(text="")
         elif n == 1:
-            self.seleccion_label.config(text="1 cliente seleccionado")
+            self.seleccion_label.config(text="1 contacto seleccionado")
         else:
-            self.seleccion_label.config(text=f"{n} clientes seleccionados")
+            self.seleccion_label.config(text=f"{n} contactos seleccionados")
 
     def _autoajustar_columnas(self, clientes):
         """Cada columna se ensancha para que entre el texto más largo que tenga (encabezado
@@ -468,7 +528,8 @@ class App(tk.Tk):
         if self.filtros.get("texto"):
             partes.append(f"Texto: '{self.filtros['texto']}'")
         texto = "Filtros: " + " | ".join(partes) if partes else "Sin filtros aplicados"
-        self.filtros_label.config(text=f"{texto}   ({len(self._clientes_actuales)} clientes)")
+        n = len(self._clientes_actuales)
+        self.filtros_label.config(text=f"{texto}   ({n} {'contacto' if n == 1 else 'contactos'})")
 
     def _seleccion_id(self):
         sel = self.tree.selection()
@@ -589,7 +650,7 @@ class App(tk.Tk):
     def _editar_cliente(self):
         cliente_id = self._seleccion_id()
         if not cliente_id:
-            messagebox.showinfo("Seleccionar", "Elegí un cliente para editar.")
+            messagebox.showinfo("Seleccionar", "Elegí un contacto para editar.")
             return
         cliente = next(c for c in self._clientes_actuales if c.id == cliente_id)
         ClienteForm(self, on_saved=self._refrescar, cliente=cliente)
@@ -597,12 +658,12 @@ class App(tk.Tk):
     def _borrar_cliente(self):
         ids = self._seleccion_ids()
         if not ids:
-            messagebox.showinfo("Seleccionar", "Elegí uno o más clientes para borrar.")
+            messagebox.showinfo("Seleccionar", "Elegí uno o más contactos para borrar.")
             return
         pregunta = (
-            "¿Borrar el cliente seleccionado?"
+            "¿Borrar el contacto seleccionado?"
             if len(ids) == 1
-            else f"¿Borrar los {len(ids)} clientes seleccionados?"
+            else f"¿Borrar los {len(ids)} contactos seleccionados?"
         )
         if not messagebox.askyesno("Confirmar", pregunta):
             return
@@ -676,7 +737,7 @@ class App(tk.Tk):
 
     def _exportar_excel(self):
         if not self._clientes_actuales:
-            messagebox.showinfo("Sin datos", "No hay clientes para exportar en la vista actual.")
+            messagebox.showinfo("Sin datos", "No hay contactos para exportar en la vista actual.")
             return
         try:
             import excel_import
@@ -687,7 +748,7 @@ class App(tk.Tk):
             )
             return
         path = filedialog.asksaveasfilename(
-            defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], initialfile="clientes.xlsx"
+            defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], initialfile="contactos.xlsx"
         )
         if not path:
             return
@@ -696,7 +757,7 @@ class App(tk.Tk):
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Error al exportar", str(exc))
             return
-        messagebox.showinfo("Exportado", f"Se exportaron {len(self._clientes_actuales)} clientes.")
+        messagebox.showinfo("Exportado", f"Se exportaron {len(self._clientes_actuales)} contactos.")
 
     def _imprimir(self):
         ids_seleccionados = set(self._seleccion_ids())
@@ -706,7 +767,7 @@ class App(tk.Tk):
             clientes = self._clientes_actuales
 
         if not clientes:
-            messagebox.showinfo("Sin datos", "No hay clientes para imprimir en la vista actual.")
+            messagebox.showinfo("Sin datos", "No hay contactos para imprimir en la vista actual.")
             return
 
         try:
@@ -719,7 +780,7 @@ class App(tk.Tk):
     def _editar_seleccionados(self):
         ids_seleccionados = set(self._seleccion_ids())
         if not ids_seleccionados:
-            messagebox.showinfo("Seleccionar", "Elegí uno o más clientes para editar.")
+            messagebox.showinfo("Seleccionar", "Elegí uno o más contactos para editar.")
             return
         clientes = [c for c in self._clientes_actuales if c.id in ids_seleccionados]
         EditarLotePopup(self, clientes, on_guardado=self._refrescar)

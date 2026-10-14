@@ -5,7 +5,7 @@ import excel_import
 
 CAMPOS = [
     ("nombre", "Nombre *", True),
-    ("contacto", "Contacto / Teléfono *", True),
+    ("contacto", "Teléfono *", True),
     ("estado", "Estado", False),
     ("notas", "Notas", False),
     ("recomendado_por", "Recomendado por", False),

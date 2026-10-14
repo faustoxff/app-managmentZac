@@ -28,7 +28,7 @@ def imprimir_clientes(clientes: Iterable[Cliente]) -> None:
 
     contenido = f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
-<title>Clientes</title>
+<title>Contactos</title>
 <style>
   body {{ font-family: sans-serif; margin: 24px; }}
   table {{ border-collapse: collapse; width: 100%; }}
@@ -43,10 +43,10 @@ def imprimir_clientes(clientes: Iterable[Cliente]) -> None:
   button {{ font-size: 1rem; padding: 8px 16px; margin-bottom: 16px; }}
   @media print {{ button {{ display: none; }} }}
 </style></head><body>
-<h2>Clientes</h2>
+<h2>Contactos</h2>
 <button onclick="window.print()">Imprimir</button>
 <table>
-<thead><tr><th>Nombre</th><th>Contacto</th><th>Estado</th><th>Fecha de alta</th><th>Última actualización</th><th>Recomendado por</th><th>Notas</th></tr></thead>
+<thead><tr><th>Nombre</th><th>Teléfono</th><th>Estado</th><th>Fecha de alta</th><th>Última actualización</th><th>Recomendado por</th><th>Notas</th></tr></thead>
 <tbody>
 {filas_html}
 </tbody>

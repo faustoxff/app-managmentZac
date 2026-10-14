@@ -131,7 +131,7 @@ class PanelDuplicados(tk.Toplevel):
                 "se guardan igual si confirmás."
             )
         if any(c.origen == "local" for c in coincidencias):
-            lineas.append("Doble clic para ver el cliente existente.")
+            lineas.append("Doble clic para ver el contacto existente.")
         self.pie_label.config(text="\n".join(lineas))
 
         self._reubicar()

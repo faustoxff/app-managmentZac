@@ -30,7 +30,7 @@ class DuplicadoPopup(tk.Toplevel):
         self.tree = ttk.Treeview(self, columns=cols, show="headings", height=min(5, len(duplicados)))
         for c, label, width in [
             ("nombre", "Nombre", 160),
-            ("contacto", "Contacto", 140),
+            ("contacto", "Teléfono", 140),
             ("estado", "Estado", 110),
             ("fecha", "Última actualización", 150),
         ]:

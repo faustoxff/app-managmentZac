@@ -36,7 +36,7 @@ class PestanaImportadosZ2(tk.Toplevel):
         self.tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
         encabezados = {
             "nombre": ("NOMBRE", 220),
-            "contacto": ("CONTACTO", 130),
+            "contacto": ("TELÉFONO", 130),
             "estado": ("ESTADO", 110),
             "alta": ("ALTA", 100),
             "rec": ("REC.", 120),
@@ -81,7 +81,7 @@ class PestanaImportadosZ2(tk.Toplevel):
                 ),
                 tags=tags,
             )
-        self.resumen_label.config(text=f"{len(clientes)} cliente(s) importados de Z2")
+        self.resumen_label.config(text=f"{len(clientes)} contacto(s) importados de Z2")
 
     def _verificar(self):
         self.verificar_btn.config(state="disabled", text="Verificando...")

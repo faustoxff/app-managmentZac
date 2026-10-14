@@ -429,7 +429,7 @@ def eliminar_estado(estado_id: int) -> tuple[bool, str]:
             "SELECT COUNT(*) FROM clientes WHERE estado_id = ?", (estado_id,)
         ).fetchone()[0]
         if en_uso > 0:
-            return False, f"No se puede borrar: {en_uso} cliente(s) usan este estado."
+            return False, f"No se puede borrar: {en_uso} contacto(s) usan este estado."
         conn.execute("DELETE FROM estados WHERE id = ?", (estado_id,))
         return True, ""
 
@@ -881,7 +881,7 @@ def procesar_lote(filas: Iterable[FilaImport]) -> ResultadoLote:
         nombre = (fila.nombre or "").strip()
         contacto = (fila.contacto or "").strip()
         if not nombre or not contacto:
-            resultado.fallidos.append((fila, "Falta nombre o contacto"))
+            resultado.fallidos.append((fila, "Falta nombre o teléfono"))
             continue
 
         dups = buscar_duplicados(nombre, contacto) + _coincidencias_z2_como_clientes(nombre, contacto)

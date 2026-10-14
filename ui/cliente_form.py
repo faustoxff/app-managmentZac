@@ -23,7 +23,7 @@ class ClienteForm(tk.Toplevel):
         super().__init__(master)
         self.on_saved = on_saved
         self.cliente = cliente
-        self.title("Editar cliente" if cliente else "Nuevo cliente")
+        self.title("Editar contacto" if cliente else "Nuevo contacto")
         self.resizable(False, False)
         self.transient(master)
         self.grab_set()
@@ -42,7 +42,7 @@ class ClienteForm(tk.Toplevel):
         self.nombre_entry = tk.Entry(self, textvariable=self.nombre_var, width=40)
         self.nombre_entry.grid(row=0, column=1, **pad)
 
-        tk.Label(self, text="Contacto").grid(row=1, column=0, sticky="w", **pad)
+        tk.Label(self, text="Teléfono").grid(row=1, column=0, sticky="w", **pad)
         self.contacto_var = tk.StringVar(value=cliente.contacto if cliente else "")
         contacto_entry = tk.Entry(self, textvariable=self.contacto_var, width=40)
         contacto_entry.grid(row=1, column=1, **pad)
@@ -400,9 +400,9 @@ class ClienteForm(tk.Toplevel):
             resumen += f"\n… y {len(coincidencias) - 5} más."
 
         if messagebox.askyesno(
-            "Este cliente ya tiene carpeta en Z2",
+            "Este contacto ya tiene carpeta en Z2",
             f"{resumen}\n\n"
-            "Ese cliente ya es tuyo y tiene carpeta ART.\n\n"
+            "Ese contacto ya tiene carpeta ART en Z2.\n\n"
             "¿Lo guardás igual en Z1?\n"
             "(Si no, se cancela y queda solo en Z2.)",
             parent=self,

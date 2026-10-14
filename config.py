@@ -150,3 +150,15 @@ def agregar_recordatorios_avisados_hoy(hoy: str, ids_nuevos: list[int]) -> None:
     datos = _leer_config()
     datos["recordatorios_avisados"] = {"fecha": hoy, "ids": sorted(ya_avisados)}
     _escribir_config(datos)
+
+
+def obtener_z2_avisados() -> set[int]:
+    """Clientes de Z1 que ya se le mostraron al usuario como "ya están en Z2", para que el
+    chequeo periódico no vuelva a avisar de los mismos cada vez."""
+    return set(_leer_config().get("z2_avisados", []))
+
+
+def agregar_z2_avisados(ids: list[int]) -> None:
+    datos = _leer_config()
+    datos["z2_avisados"] = sorted(set(datos.get("z2_avisados", [])) | set(ids))
+    _escribir_config(datos)

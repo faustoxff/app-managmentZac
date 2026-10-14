@@ -21,7 +21,7 @@ class IntegracionZ2Popup(tk.Toplevel):
         self.grab_set()
 
         info = (
-            "Al cargar un cliente nuevo, Z1 consulta a Z2 para avisarte si esa persona ya "
+            "Al cargar un contacto nuevo, Z1 consulta a Z2 para avisarte si esa persona ya "
             "tiene una carpeta en el otro programa. Z1 solo lee: nunca escribe ni borra nada "
             "de Z2.\n\n"
             "La URL es la base donde está Z2 (por ejemplo https://mi-z2.onrender.com) y el "

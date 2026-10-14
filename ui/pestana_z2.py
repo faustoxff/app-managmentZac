@@ -32,7 +32,7 @@ class PestanaZ2(tk.Toplevel):
         self._orden_asc = True
         self._cargando = False
 
-        self.title("Clientes de Z2 (carpetas ART) — solo consulta")
+        self.title("Contactos de Z2 (carpetas ART) — solo consulta")
         self.geometry("920x520")
         self.transient(master)
 
@@ -114,7 +114,7 @@ class PestanaZ2(tk.Toplevel):
         self.traer_btn.pack(side="left")
         tk.Label(
             pie,
-            text="  Z1 nunca manda nada a Z2. Traer un cliente lo carga solo en Z1.",
+            text="  Z1 nunca manda nada a Z2. Traer un contacto lo carga solo en Z1.",
             fg="gray40",
         ).pack(side="left")
 
@@ -130,7 +130,7 @@ class PestanaZ2(tk.Toplevel):
     def _comparar(self):
         from ui.comparacion_z2_popup import ComparacionZ2Popup
 
-        ComparacionZ2Popup(self)
+        ComparacionZ2Popup(self, on_cambio=getattr(self.master, "_refrescar", None))
 
     def _sincronizar(self):
         self.sincronizar_btn.config(state="disabled", text="Sincronizando...")
@@ -298,7 +298,7 @@ class PestanaZ2(tk.Toplevel):
         if db.buscar_duplicados(nombre, caso["telefono"]):
             messagebox.showwarning(
                 "Ya está cargado",
-                f"{nombre}\n\nEse cliente ya está en la base de Z1.",
+                f"{nombre}\n\nEse contacto ya está en la base de Z1.",
                 parent=self,
             )
             return
