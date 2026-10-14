@@ -69,6 +69,48 @@ class TestChequeoZ2(BaseDB):
         finally:
             app.destroy()
 
+    def test_cambiar_estado_de_uno_desde_la_celda(self):
+        import tkinter as tk
+
+        try:
+            root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin display disponible para probar Tkinter")
+        from ui.comparacion_z2_popup import ComparacionZ2Popup
+
+        try:
+            pop = ComparacionZ2Popup(root)
+            root.update()
+            fila = pop.tree.get_children()[0]
+            pop._abrir_combo_estado(fila, "#3")
+            pop._combo_estado.set("CLIENTE")
+            pop._combo_estado.event_generate("<<ComboboxSelected>>")
+            root.update()
+            estados = {c.nombre: c.estado_nombre for c in db.listar_clientes()}
+            self.assertEqual(estados["PEREZ JUAN"], "CLIENTE")
+            self.assertEqual(estados["NADA"], "NUEVO")
+        finally:
+            root.destroy()
+
+    def test_la_ventana_se_abre_una_sola_vez_por_dia(self):
+        from datetime import date
+
+        app = self._app()
+        try:
+            app._avisar_nuevos_en_z2()
+            app._aviso_z2.destroy()
+            db.crear_cliente("OTRO", "2235000003", self.estado_id("NUEVO"))
+            db.reemplazar_z2_casos([caso("PEREZ", "JUAN", "2235000001"), caso("OTRO", "", "2235000003")])
+            app._avisar_nuevos_en_z2()
+            self.assertFalse(app._aviso_z2.winfo_exists())
+            self.assertEqual(config.obtener_z2_ultimo_aviso(), date.today().isoformat())
+            # Al día siguiente sí: el que apareció después no se perdió.
+            config.guardar_z2_ultimo_aviso("2000-01-01")
+            app._avisar_nuevos_en_z2()
+            self.assertTrue(app._aviso_z2.winfo_exists())
+        finally:
+            app.destroy()
+
     def test_config_recuerda_avisados(self):
         config.agregar_z2_avisados([1, 2])
         config.agregar_z2_avisados([2, 3])

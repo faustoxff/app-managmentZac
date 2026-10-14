@@ -20,6 +20,7 @@ from ui.ia_import_popup import IAImportPopup
 from ui.mapeo_excel_popup import MapeoColumnasPopup
 from ui.ocr_review_popup import OcrReviewPopup
 from ui.restaurar_backup_local_popup import RestaurarBackupLocalPopup
+from ui.seleccion_teclado import habilitar_shift_flechas
 from ui.resumen_import_popup import ResumenImportPopup
 from ui.subida_celular_popup import SubidaCelularPopup
 
@@ -108,6 +109,11 @@ class App(tk.Tk):
     def _avisar_nuevos_en_z2(self):
         if not self.winfo_exists():
             return
+        # Una vez por día como mucho: los que aparezcan después quedan para el día siguiente
+        # (no se marcan como avisados hasta que se muestran).
+        hoy = date.today().isoformat()
+        if config.obtener_z2_ultimo_aviso() == hoy:
+            return
         nuevos = self._nuevos_en_z2()
         if not nuevos:
             return
@@ -123,6 +129,7 @@ class App(tk.Tk):
             self, coincidencias=nuevos, titulo="Contactos que ya están en Z2", on_cambio=self._refrescar
         )
         config.agregar_z2_avisados([r["cliente"].id for r in nuevos])
+        config.guardar_z2_ultimo_aviso(hoy)
 
     def _chequear_recordatorios(self):
         """A partir de las 8am, avisa una vez por día (por cliente) quién tiene recordatorio
@@ -389,6 +396,7 @@ class App(tk.Tk):
         self.tree.bind("<Double-1>", self._doble_click_tabla)
         self.tree.bind("<Control-c>", self._copiar_celda)
         self.tree.bind("<<TreeviewSelect>>", self._actualizar_seleccion_label)
+        habilitar_shift_flechas(self.tree)
 
     def _actualizar_seleccion_label(self, event=None):
         n = len(self.tree.selection())

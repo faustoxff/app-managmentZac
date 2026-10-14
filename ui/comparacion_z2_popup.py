@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 import db
+from ui.seleccion_teclado import habilitar_shift_flechas
 
 
 class ComparacionZ2Popup(tk.Toplevel):
@@ -34,6 +35,10 @@ class ComparacionZ2Popup(tk.Toplevel):
         frame = tk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8)
         self.tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
+        habilitar_shift_flechas(self.tree)
+        # Clic en la celda ESTADO Z1: desplegable para cambiar el estado de ese contacto solo.
+        self._combo_estado = None
+        self.tree.bind("<Button-1>", self._click_tabla, add="+")
         for c, (texto, ancho) in encabezados.items():
             self.tree.heading(c, text=texto, anchor="w")
             self.tree.column(c, width=ancho, anchor="w", stretch=False)
@@ -67,6 +72,9 @@ class ComparacionZ2Popup(tk.Toplevel):
         self._cargar()
 
     def _cargar(self):
+        # Se guarda la posición del scroll: al cambiar estados de a uno en una lista larga,
+        # volver arriba cada vez obligaría a buscar de nuevo por dónde se iba.
+        posicion = self.tree.yview()[0]
         self.tree.delete(*self.tree.get_children())
         casos, _ = db.listar_z2_casos()
         if not casos:
@@ -99,6 +107,8 @@ class ComparacionZ2Popup(tk.Toplevel):
                     r["motivo"],
                 ),
             )
+        self.tree.update_idletasks()
+        self.tree.yview_moveto(posicion)
         if self.coincidencias:
             clientes = len({r["cliente"].id for r in self.coincidencias})
             self.resumen_label.config(
@@ -111,6 +121,51 @@ class ComparacionZ2Popup(tk.Toplevel):
                 text=f"No hay contactos iguales entre Z1 y las {len(casos)} carpetas de Z2.",
                 fg="#15803d",
             )
+
+    def _cerrar_combo(self):
+        if self._combo_estado is not None:
+            self._combo_estado.destroy()
+            self._combo_estado = None
+
+    def _click_tabla(self, event):
+        self._cerrar_combo()
+        if self.tree.identify_region(event.x, event.y) != "cell":
+            return
+        columna = self.tree.identify_column(event.x)
+        fila = self.tree.identify_row(event.y)
+        if not fila or self.tree["columns"][int(columna[1:]) - 1] != "z1_estado":
+            return
+        # after_idle: primero deja que el clic seleccione la fila, después abre el desplegable.
+        self.after_idle(lambda: self._abrir_combo_estado(fila, columna))
+
+    def _abrir_combo_estado(self, fila: str, columna: str):
+        bbox = self.tree.bbox(fila, columna)
+        if not bbox:
+            return
+        x, y, w, h = bbox
+        cliente = self.coincidencias[int(fila)]["cliente"]
+        var = tk.StringVar(value=cliente.estado_nombre)
+        combo = ttk.Combobox(
+            self.tree, textvariable=var, values=[e.nombre for e in self.estados], state="readonly"
+        )
+        combo.place(x=x, y=y, width=w, height=h)
+        combo.focus_set()
+        self._combo_estado = combo
+
+        def confirmar(_event=None):
+            nuevo = next((e for e in self.estados if e.nombre == var.get()), None)
+            self._cerrar_combo()
+            if nuevo is None or nuevo.id == cliente.estado_id:
+                return
+            db.cambiar_estado_cliente(cliente.id, nuevo.id)
+            self._cargar()
+            if self.on_cambio:
+                self.on_cambio()
+
+        # Sin <FocusOut>: abrir la lista del desplegable dispara un FocusOut transitorio y lo
+        # cerraría antes de poder elegir (mismo cuidado que en la tabla principal).
+        combo.bind("<<ComboboxSelected>>", confirmar)
+        combo.bind("<Escape>", lambda _e: self._cerrar_combo())
 
     def _seleccionar_todos(self):
         self.tree.selection_set(self.tree.get_children())

@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 
 import db
 from db import ResultadoLote
+from ui.seleccion_teclado import habilitar_shift_flechas
 
 
 class ResumenImportPopup(tk.Toplevel):
@@ -42,6 +43,7 @@ class ResumenImportPopup(tk.Toplevel):
         self.tree.pack(side="left")
         vsb.pack(side="left", fill="y")
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._actualizar_seleccion())
+        habilitar_shift_flechas(self.tree)
 
         self.seleccion_label = tk.Label(self, text="", fg="#2563eb")
         self.seleccion_label.pack(padx=12, anchor="w")

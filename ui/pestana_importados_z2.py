@@ -5,6 +5,7 @@ from tkinter import messagebox, ttk
 import db
 import z2_sync
 from fechas import formatear_fecha
+from ui.seleccion_teclado import habilitar_shift_flechas
 
 ESTADO_SIN_VERIFICAR = "sin verificar"
 ESTADO_EN_Z2 = "está en Z2"
@@ -34,6 +35,7 @@ class PestanaImportadosZ2(tk.Toplevel):
         frame = tk.Frame(self)
         frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
         self.tree = ttk.Treeview(frame, columns=cols, show="headings", selectmode="extended")
+        habilitar_shift_flechas(self.tree)
         encabezados = {
             "nombre": ("NOMBRE", 220),
             "contacto": ("TELÉFONO", 130),

@@ -162,3 +162,14 @@ def agregar_z2_avisados(ids: list[int]) -> None:
     datos = _leer_config()
     datos["z2_avisados"] = sorted(set(datos.get("z2_avisados", [])) | set(ids))
     _escribir_config(datos)
+
+
+def obtener_z2_ultimo_aviso() -> str:
+    """Fecha (AAAA-MM-DD) de la última vez que se abrió el aviso de "ya están en Z2"."""
+    return _leer_config().get("z2_ultimo_aviso", "")
+
+
+def guardar_z2_ultimo_aviso(fecha: str) -> None:
+    datos = _leer_config()
+    datos["z2_ultimo_aviso"] = fecha
+    _escribir_config(datos)
