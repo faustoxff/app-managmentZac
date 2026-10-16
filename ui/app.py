@@ -103,6 +103,64 @@ class App(ctk.CTk):
 
         threading.Thread(target=trabajo, daemon=True).start()
 
+    def _actualizar_z2_manual(self):
+        """Botón "Actualizar Z2": baja la copia de Z2 ahora mismo (sin esperar el chequeo de
+        cada 3 horas), refresca la pestaña Z2 si está abierta y muestra los contactos de Z1
+        que ya están en Z2, aunque ya se haya avisado hoy."""
+        if not config.obtener_z2_read_url().strip():
+            messagebox.showinfo(
+                "Z2 sin configurar",
+                "Primero configurá la conexión en Configuración > Integración con Z2.",
+                parent=self,
+            )
+            return
+        self.actualizar_z2_btn.configure(state="disabled", text="Actualizando...")
+
+        def trabajo():
+            import z2_sync
+
+            try:
+                z2_sync.sincronizar_copia_local()
+                error = None
+            except Exception as exc:  # noqa: BLE001 - se muestra al usuario
+                error = str(exc)
+            try:
+                self.after(0, lambda: self._fin_actualizar_z2_manual(error))
+            except (tk.TclError, RuntimeError):
+                pass  # la app se cerró mientras tanto
+
+        threading.Thread(target=trabajo, daemon=True).start()
+
+    def _fin_actualizar_z2_manual(self, error):
+        if not self.winfo_exists():
+            return
+        self.actualizar_z2_btn.configure(state="normal", text="Actualizar Z2")
+        if error:
+            messagebox.showerror(
+                "No se pudo actualizar",
+                f"No se pudo bajar las carpetas de Z2:\n\n{error}\n\n"
+                "La copia que ya tenías quedó como estaba.",
+                parent=self,
+            )
+            return
+        pestana = getattr(self, "_pestana_z2", None)
+        if pestana is not None and pestana.winfo_exists():
+            pestana._cargar()
+        nuevos = self._nuevos_en_z2()
+        if not nuevos:
+            messagebox.showinfo(
+                "Z2 actualizado",
+                "Se actualizó la copia de Z2. No hay contactos nuevos que ya estén en Z2.",
+                parent=self,
+            )
+            return
+        from ui.comparacion_z2_popup import ComparacionZ2Popup
+
+        self._aviso_z2 = ComparacionZ2Popup(
+            self, coincidencias=nuevos, titulo="Contactos que ya están en Z2", on_cambio=self._refrescar
+        )
+        config.agregar_z2_avisados([r["cliente"].id for r in nuevos])
+
     def _nuevos_en_z2(self) -> list[dict]:
         """Coincidencias con Z2 que todavía no se avisaron. Los que se trajeron de Z2 no
         cuentan: es obvio que están ahí."""
@@ -305,6 +363,8 @@ class App(ctk.CTk):
         tema.boton(fila1, "Borrar", self._borrar_cliente, peligro=True).pack(side="left", padx=3)
         tema.boton(fila1, "Exportar Excel", self._exportar_excel).pack(side="right", padx=3)
         tema.boton(fila1, "Pestaña Z2", self._abrir_pestana_z2).pack(side="right", padx=3)
+        self.actualizar_z2_btn = tema.boton(fila1, "Actualizar Z2", self._actualizar_z2_manual)
+        self.actualizar_z2_btn.pack(side="right", padx=3)
 
         # Fila 2: búsqueda y filtros; a la derecha, las importaciones.
         fila2 = ctk.CTkFrame(barra, fg_color="transparent")
