@@ -1,4 +1,6 @@
 import threading
+import time
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
@@ -6,15 +8,18 @@ from ui.api_key_popup import ApiKeyPopup
 from ui import tema
 
 
+PAUSA_ENTRE_FOTOS = 6.5  # segundos
+
+
 class IAImportPopup(tk.Toplevel):
-    """Selector de imagen + instrucción tipo chat para importar con IA (vía OpenRouter).
+    """Selector de imagen + instrucción tipo chat para importar con IA (Gemini u OpenRouter, según Configurar IA).
     La llamada a la API corre en un hilo aparte para no congelar la ventana; el resultado
     vuelve al hilo principal con self.after(), nunca se toca la UI desde el hilo de red."""
 
     def __init__(self, master, on_resultado):
         super().__init__(master)
         self.on_resultado = on_resultado
-        self.path_imagen: str | None = None
+        self.paths: list[str] = []
 
         self.title("Importar con IA")
         self.resizable(False, False)
@@ -23,7 +28,7 @@ class IAImportPopup(tk.Toplevel):
 
         sel_frame = tk.Frame(self)
         sel_frame.pack(padx=16, pady=(16, 8), fill="x")
-        tk.Button(sel_frame, text="Seleccionar imagen...", command=self._seleccionar_imagen).pack(
+        tk.Button(sel_frame, text="Seleccionar imágenes...", command=self._seleccionar_imagen).pack(
             side="left"
         )
         self.archivo_label = tk.Label(sel_frame, text="(ningún archivo)", fg="gray30")
@@ -49,32 +54,43 @@ class IAImportPopup(tk.Toplevel):
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=14).pack(side="left", padx=6)
 
     def _seleccionar_imagen(self):
-        path = filedialog.askopenfilename(
+        paths = filedialog.askopenfilenames(
             filetypes=[("Imágenes", "*.jpg *.jpeg *.png *.webp"), ("Todos los archivos", "*.*")],
             parent=self,
         )
-        if path:
-            self.path_imagen = path
-            self.archivo_label.config(text=path.split("/")[-1])
+        if paths:
+            self.paths = list(paths)
+            self.archivo_label.config(
+                text=Path(paths[0]).name if len(paths) == 1 else f"{len(paths)} imágenes"
+            )
 
     def _set_cargando(self, cargando: bool, texto: str = ""):
         self.enviar_btn.config(state="disabled" if cargando else "normal")
         self.estado_label.config(text=texto)
 
     def _enviar(self):
-        if not self.path_imagen:
-            messagebox.showwarning("Falta la imagen", "Elegí una imagen primero.", parent=self)
+        if not self.paths:
+            messagebox.showwarning("Falta la imagen", "Elegí al menos una imagen.", parent=self)
             return
 
         instruccion = self.texto.get("1.0", "end").strip()
         self._set_cargando(True, "Consultando IA... (puede tardar unos segundos)")
-        threading.Thread(target=self._trabajo, args=(self.path_imagen, instruccion), daemon=True).start()
+        threading.Thread(target=self._trabajo, args=(list(self.paths), instruccion), daemon=True).start()
 
-    def _trabajo(self, path: str, instruccion: str):
+    def _trabajo(self, paths: list[str], instruccion: str):
         import ia_import
 
         try:
-            candidatos = ia_import.extraer_candidatos(path, instruccion)
+            candidatos = []
+            for i, path in enumerate(paths, start=1):
+                if i > 1:
+                    # La capa gratis de Gemini admite ~10 pedidos por minuto: espaciarlos
+                    # evita el error 429 al mandar varias fotos seguidas.
+                    time.sleep(PAUSA_ENTRE_FOTOS)
+                if len(paths) > 1:
+                    texto = f"Leyendo foto {i} de {len(paths)}..."
+                    self.after(0, lambda t=texto: self._mostrar_progreso(t))
+                candidatos.extend(ia_import.extraer_candidatos(path, instruccion))
         except ia_import.FaltaApiKey:
             self.after(0, self._pedir_api_key)
             return
@@ -90,6 +106,10 @@ class IAImportPopup(tk.Toplevel):
             return
 
         self.after(0, lambda: self._on_exito(candidatos))
+
+    def _mostrar_progreso(self, texto: str):
+        if self.winfo_exists():
+            self.estado_label.config(text=texto)
 
     def _pedir_api_key(self):
         self._set_cargando(False)

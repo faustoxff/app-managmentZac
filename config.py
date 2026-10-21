@@ -45,32 +45,74 @@ def _escribir_config(datos: dict) -> None:
         pass  # no crashear si no se puede escribir (disco lleno, permisos, etc.)
 
 
-MODELO_IA_DEFAULT = "google/gemma-4-31b-it:free"
-# Los modelos gratis de OpenRouter rotan seguido (dejan de estar disponibles y aparecen otros
-# nuevos) — si este default deja de funcionar, la lista de modelos con visión disponibles hoy
-# está en https://openrouter.ai/models?fmt=cards&input_modalities=image&max_price=0, o
-# cambiando el campo "Modelo" desde Configuración > Configurar IA.
+# "Importar con IA" puede usar dos proveedores, los dos con la API compatible con OpenAI:
+#  - gemini: Google AI Studio (aistudio.google.com/apikey). Tiene capa gratis, sin tarjeta, y
+#    lee fotos bastante mejor que los modelos gratis de OpenRouter.
+#  - openrouter: openrouter.ai. Los modelos gratis rotan seguido y tienen límites de uso.
+PROVEEDORES_IA = {
+    "gemini": {
+        "nombre": "Google Gemini (gratis)",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "modelo_default": "gemini-2.5-flash",
+        "campo_key": "gemini_api_key",
+        "donde_key": "aistudio.google.com/apikey",
+    },
+    "openrouter": {
+        "nombre": "OpenRouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "modelo_default": "google/gemma-4-31b-it:free",
+        "campo_key": "openrouter_api_key",
+        "donde_key": "openrouter.ai/keys",
+    },
+}
+MODELO_IA_DEFAULT = PROVEEDORES_IA["openrouter"]["modelo_default"]
 
 
-def obtener_api_key() -> str:
-    """API key de OpenRouter (openrouter.ai/keys) para "Importar con IA". Vacío si nunca se
-    configuró."""
-    return _leer_config().get("openrouter_api_key", "")
-
-
-def guardar_api_key(api_key: str) -> None:
+def obtener_proveedor_ia() -> str:
+    """Quien ya había configurado OpenRouter sigue con OpenRouter; el resto arranca con
+    Gemini, que es gratis y no necesita tarjeta."""
     datos = _leer_config()
-    datos["openrouter_api_key"] = api_key.strip()
+    proveedor = datos.get("proveedor_ia")
+    if proveedor in PROVEEDORES_IA:
+        return proveedor
+    return "openrouter" if datos.get("openrouter_api_key") else "gemini"
+
+
+def guardar_proveedor_ia(proveedor: str) -> None:
+    if proveedor not in PROVEEDORES_IA:
+        return
+    datos = _leer_config()
+    datos["proveedor_ia"] = proveedor
     _escribir_config(datos)
 
 
-def obtener_modelo_ia() -> str:
-    return _leer_config().get("modelo_ia", MODELO_IA_DEFAULT)
+def obtener_api_key(proveedor: str | None = None) -> str:
+    """API key del proveedor de IA activo (o del indicado). Vacío si nunca se configuró."""
+    proveedor = proveedor or obtener_proveedor_ia()
+    return _leer_config().get(PROVEEDORES_IA[proveedor]["campo_key"], "")
 
 
-def guardar_modelo_ia(modelo: str) -> None:
+def guardar_api_key(api_key: str, proveedor: str | None = None) -> None:
+    proveedor = proveedor or obtener_proveedor_ia()
     datos = _leer_config()
-    datos["modelo_ia"] = modelo.strip() or MODELO_IA_DEFAULT
+    datos[PROVEEDORES_IA[proveedor]["campo_key"]] = api_key.strip()
+    _escribir_config(datos)
+
+
+def obtener_modelo_ia(proveedor: str | None = None) -> str:
+    proveedor = proveedor or obtener_proveedor_ia()
+    default = PROVEEDORES_IA[proveedor]["modelo_default"]
+    if proveedor == "openrouter":
+        return _leer_config().get("modelo_ia", default)  # nombre histórico de la clave
+    return _leer_config().get("modelo_ia_gemini", default)
+
+
+def guardar_modelo_ia(modelo: str, proveedor: str | None = None) -> None:
+    proveedor = proveedor or obtener_proveedor_ia()
+    default = PROVEEDORES_IA[proveedor]["modelo_default"]
+    datos = _leer_config()
+    clave = "modelo_ia" if proveedor == "openrouter" else "modelo_ia_gemini"
+    datos[clave] = modelo.strip() or default
     _escribir_config(datos)
 
 

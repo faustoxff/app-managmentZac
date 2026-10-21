@@ -13,7 +13,11 @@ import re
 import config
 from db import FilaImport
 
-INSTRUCCION_DEFAULT = "Extraé nombre completo y teléfono de cada persona en esta hoja."
+INSTRUCCION_DEFAULT = (
+    "Extraé nombre completo (apellido y nombre) y teléfono de cada persona en esta hoja. "
+    "Ignorá encabezados, fechas, profesionales e instituciones. Escribí el teléfono solo con "
+    "dígitos, sin espacios ni guiones. Si un dato no se lee bien, dejalo vacío en vez de inventarlo."
+)
 
 PROMPT_FORMATO = (
     ' Respondé ÚNICAMENTE con JSON válido: una lista de objetos con las claves "nombre" y '
@@ -43,7 +47,8 @@ def _requerir_cliente_openrouter():
     if not api_key:
         raise FaltaApiKey()
 
-    return openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+    base_url = config.PROVEEDORES_IA[config.obtener_proveedor_ia()]["base_url"]
+    return openai.OpenAI(api_key=api_key, base_url=base_url)
 
 
 def _extraer_json(texto: str) -> list:
@@ -80,7 +85,7 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
     try:
         respuesta = client.chat.completions.create(
             model=modelo,
-            max_tokens=2048,
+            max_tokens=4096,
             messages=[
                 {
                     "role": "user",
@@ -96,13 +101,13 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
         )
     except openai.RateLimitError as exc:
         raise IAImportError(
-            "Se alcanzó el límite de uso gratuito de OpenRouter (error 429).\n\n"
-            "Cargá crédito en tu cuenta en openrouter.ai/credits para subir el límite, "
-            "o esperá un rato y probá de nuevo."
+            "Se alcanzó el límite de uso gratuito de la IA (error 429).\n\n"
+            "Esperá un minuto y probá de nuevo (la capa gratis permite pocas fotos por minuto "
+            "y un tope por día). Con OpenRouter también podés cargar crédito."
         ) from exc
     except openai.AuthenticationError as exc:
         raise IAImportError(
-            "La API key de OpenRouter no es válida. Podés cambiarla desde el menú "
+            "La API key de la IA no es válida. Podés cambiarla desde el menú "
             "Configuración > Configurar IA."
         ) from exc
     except openai.APITimeoutError as exc:
