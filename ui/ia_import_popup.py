@@ -20,6 +20,7 @@ class IAImportPopup(tk.Toplevel):
         super().__init__(master)
         self.on_resultado = on_resultado
         self.paths: list[str] = []
+        self._cancelado = threading.Event()  # el hilo de fondo lo mira para frenar al cerrar
 
         self.title("Importar con IA")
         self.resizable(False, False)
@@ -53,6 +54,19 @@ class IAImportPopup(tk.Toplevel):
         self.enviar_btn.pack(side="left", padx=6)
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=14).pack(side="left", padx=6)
 
+    def destroy(self):
+        # Cerrar el popup (Cancelar o la X) corta el lote: sin esto el hilo seguía pidiendo
+        # fotos a la IA hasta terminar, gastando cuota para nada.
+        self._cancelado.set()
+        super().destroy()
+
+    def _agendar(self, callback):
+        """self.after(0, callback) desde el hilo de fondo, sin reventar si el popup ya se cerró."""
+        try:
+            self.after(0, callback)
+        except (RuntimeError, tk.TclError):
+            pass
+
     def _seleccionar_imagen(self):
         paths = filedialog.askopenfilenames(
             filetypes=[("Imágenes", "*.jpg *.jpeg *.png *.webp"), ("Todos los archivos", "*.*")],
@@ -80,32 +94,38 @@ class IAImportPopup(tk.Toplevel):
     def _trabajo(self, paths: list[str], instruccion: str):
         import ia_import
 
-        try:
-            candidatos = []
-            for i, path in enumerate(paths, start=1):
-                if i > 1:
-                    # La capa gratis de Gemini admite ~10 pedidos por minuto: espaciarlos
-                    # evita el error 429 al mandar varias fotos seguidas.
-                    time.sleep(PAUSA_ENTRE_FOTOS)
-                if len(paths) > 1:
-                    texto = f"Leyendo foto {i} de {len(paths)}..."
-                    self.after(0, lambda t=texto: self._mostrar_progreso(t))
+        candidatos = []
+        fallidas = []  # (nombre de la foto, motivo): una foto que falla no tira abajo el lote
+        for i, path in enumerate(paths, start=1):
+            if i > 1:
+                # La capa gratis de Gemini admite ~10 pedidos por minuto: espaciarlos
+                # evita el error 429 al mandar varias fotos seguidas.
+                if self._cancelado.wait(PAUSA_ENTRE_FOTOS):
+                    return
+            if self._cancelado.is_set():
+                return
+            if len(paths) > 1:
+                texto = f"Leyendo foto {i} de {len(paths)}..."
+                self._agendar(lambda t=texto: self._mostrar_progreso(t))
+            try:
                 candidatos.extend(ia_import.extraer_candidatos(path, instruccion))
-        except ia_import.FaltaApiKey:
-            self.after(0, self._pedir_api_key)
-            return
-        except ia_import.IAImportError as exc:
-            # Python borra `exc` al salir del except — self.after difiere la lambda, así que
-            # hay que copiar el texto a una variable normal antes o explota con NameError.
-            mensaje = str(exc)
-            self.after(0, lambda: self._on_error(mensaje))
-            return
-        except Exception as exc:  # noqa: BLE001 - no crashear ante nada inesperado del SDK
-            mensaje = f"Error inesperado: {exc}"
-            self.after(0, lambda: self._on_error(mensaje))
-            return
+            except ia_import.FaltaApiKey:
+                self._agendar(self._pedir_api_key)
+                return
+            except ia_import.IAImportError as exc:
+                fallidas.append((Path(path).name, str(exc)))
+            except Exception as exc:  # noqa: BLE001 - no crashear ante nada inesperado del SDK
+                fallidas.append((Path(path).name, f"Error inesperado: {exc}"))
 
-        self.after(0, lambda: self._on_exito(candidatos))
+        if self._cancelado.is_set():
+            return
+        if not candidatos and fallidas:
+            # Nada se pudo leer: mostramos el error de la primera foto (suele ser el mismo
+            # para todas: key inválida, límite de uso, etc.).
+            mensaje = fallidas[0][1]
+            self._agendar(lambda: self._on_error(mensaje))
+            return
+        self._agendar(lambda: self._on_exito(candidatos, fallidas))
 
     def _mostrar_progreso(self, texto: str):
         if self.winfo_exists():
@@ -119,6 +139,14 @@ class IAImportPopup(tk.Toplevel):
         self._set_cargando(False)
         messagebox.showerror("Error al importar con IA", mensaje, parent=self)
 
-    def _on_exito(self, candidatos):
+    def _on_exito(self, candidatos, fallidas=()):
+        if fallidas:
+            detalle = "\n".join(f"- {nombre}: {motivo.splitlines()[0]}" for nombre, motivo in fallidas)
+            messagebox.showwarning(
+                "Algunas fotos no se pudieron leer",
+                f"Se leyeron las demás, pero estas fallaron:\n\n{detalle}\n\n"
+                "Podés volver a importar solo esas más tarde.",
+                parent=self,
+            )
         self.destroy()
         self.on_resultado(candidatos)

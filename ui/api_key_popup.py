@@ -19,6 +19,9 @@ class ApiKeyPopup(tk.Toplevel):
         self.grab_set()
 
         self.proveedor_var = tk.StringVar(value=config.obtener_proveedor_ia())
+        self._proveedor_mostrado = self.proveedor_var.get()
+        self._campos_cargados = False  # recién tras la primera carga hay algo que preservar
+        self._borradores: dict[str, tuple[str, str]] = {}  # lo tipeado y no guardado, por proveedor
         tk.Label(self, text="Proveedor", anchor="w").pack(padx=16, pady=(16, 0), fill="x")
         for clave, datos in config.PROVEEDORES_IA.items():
             tk.Radiobutton(
@@ -44,14 +47,23 @@ class ApiKeyPopup(tk.Toplevel):
         tk.Button(btn_frame, text="Cancelar", command=self.destroy, width=12).pack(side="left", padx=6)
 
     def _cambio_proveedor(self):
+        # Antes de cambiar, guardamos lo que se tipeó para el proveedor que se está dejando:
+        # si no, volver a él pisaba lo escrito con lo guardado en disco.
+        if self._campos_cargados:
+            self._borradores[self._proveedor_mostrado] = (self.key_var.get(), self.modelo_var.get())
         proveedor = self.proveedor_var.get()
+        self._proveedor_mostrado = proveedor
         datos = config.PROVEEDORES_IA[proveedor]
         self.info_label.config(
             text=f"API key: se obtiene en {datos['donde_key']}. Se guarda solo en esta PC "
             "(%APPDATA%\\GestorClientes\\config.json), nunca se comparte."
         )
-        self.key_var.set(config.obtener_api_key(proveedor))
-        self.modelo_var.set(config.obtener_modelo_ia(proveedor))
+        key, modelo = self._borradores.get(
+            proveedor, (config.obtener_api_key(proveedor), config.obtener_modelo_ia(proveedor))
+        )
+        self.key_var.set(key)
+        self.modelo_var.set(modelo)
+        self._campos_cargados = True
 
     def _guardar(self):
         api_key = self.key_var.get().strip()
