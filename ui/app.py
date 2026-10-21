@@ -919,15 +919,15 @@ class App(ctk.CTk):
             )
             return
 
-        path = filedialog.askopenfilename(
+        paths = filedialog.askopenfilenames(
             filetypes=[("Imágenes", "*.jpg *.jpeg *.png"), ("Todos los archivos", "*.*")]
         )
-        if not path:
+        if not paths:
             return
 
-        self._procesar_foto_ocr(path)
+        self._procesar_foto_ocr(list(paths))
 
-    def _procesar_foto_ocr(self, path: str):
+    def _procesar_foto_ocr(self, paths):
         """Corre el OCR sobre una foto (en un hilo aparte, para no congelar la ventana mientras
         Tesseract procesa la imagen) y abre la tabla de revisión al terminar. Se usa tanto para
         el botón manual como para las fotos que llegan por la subida desde el celular."""
@@ -943,15 +943,23 @@ class App(ctk.CTk):
                 "Procesando", "Ya hay una foto en proceso o pendiente de revisión, esperá a que termine."
             )
             return
+        if isinstance(paths, str):
+            paths = [paths]
         self._ocr_en_progreso = True
-        threading.Thread(target=self._trabajo_ocr, args=(path,), daemon=True).start()
+        threading.Thread(target=self._trabajo_ocr, args=(paths,), daemon=True).start()
 
-    def _trabajo_ocr(self, path: str):
+    def _trabajo_ocr(self, paths):
         import ocr_import
 
         try:
             try:
-                candidatos = ocr_import.extraer_candidatos(path)
+                # Varias fotos: se leen una tras otra y van a una sola tabla de revisión.
+                candidatos = []
+                for path in paths:
+                    try:
+                        candidatos.extend(ocr_import.extraer_candidatos(path))
+                    finally:
+                        self._borrar_si_es_foto_pendiente(path)
             except ocr_import.TesseractNoDisponible as exc:
                 # Python borra `exc` al salir del except (aunque el return ya se haya
                 # ejecutado) — como self.after difiere la lambda, hay que copiar el texto a
@@ -968,7 +976,8 @@ class App(ctk.CTk):
                 lambda: self._on_ocr_listo(candidatos, ocr_import.hubo_fallback_idioma())
             )
         finally:
-            self._borrar_si_es_foto_pendiente(path)
+            for path in paths:
+                self._borrar_si_es_foto_pendiente(path)
 
     def _agendar_en_ui(self, callback):
         """self.after(0, callback), pero sin reventar si la ventana ya se cerró mientras el
