@@ -362,6 +362,7 @@ class App(ctk.CTk):
             tema.boton(fila1, texto, comando).pack(side="left", padx=3)
         tema.boton(fila1, "Borrar", self._borrar_cliente, peligro=True).pack(side="left", padx=3)
         tema.boton(fila1, "Exportar Excel", self._exportar_excel).pack(side="right", padx=3)
+        tema.boton(fila1, "Exportar PDF", self._exportar_pdf).pack(side="right", padx=3)
         tema.boton(fila1, "Pestaña Z2", self._abrir_pestana_z2).pack(side="right", padx=3)
         self.actualizar_z2_btn = tema.boton(fila1, "Actualizar Z2", self._actualizar_z2_manual)
         self.actualizar_z2_btn.pack(side="right", padx=3)
@@ -838,6 +839,33 @@ class App(ctk.CTk):
             messagebox.showerror("Error al exportar", str(exc))
             return
         messagebox.showinfo("Exportado", f"Se exportaron {len(self._clientes_actuales)} contactos.")
+
+    def _exportar_pdf(self):
+        """PDF con solo nombre y teléfono. Igual que "Imprimir seleccionados": si hay contactos
+        seleccionados salen esos; si no hay ninguno, todos los de la vista actual."""
+        ids_seleccionados = set(self._seleccion_ids())
+        if ids_seleccionados:
+            clientes = [c for c in self._clientes_actuales if c.id in ids_seleccionados]
+        else:
+            clientes = self._clientes_actuales
+
+        if not clientes:
+            messagebox.showinfo("Sin datos", "No hay contactos para exportar en la vista actual.")
+            return
+
+        path = filedialog.asksaveasfilename(
+            defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile="contactos.pdf"
+        )
+        if not path:
+            return
+        try:
+            import pdf_export
+
+            pdf_export.exportar_pdf(path, clientes)
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("Error al exportar", str(exc))
+            return
+        messagebox.showinfo("Exportado", f"Se exportaron {len(clientes)} contactos a PDF.")
 
     def _imprimir(self):
         ids_seleccionados = set(self._seleccion_ids())
