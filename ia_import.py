@@ -69,6 +69,13 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
 
     client = _requerir_cliente_openrouter()
     modelo = config.obtener_modelo_ia()
+    proveedor = config.obtener_proveedor_ia()
+    nombre_proveedor = config.PROVEEDORES_IA[proveedor]["nombre"]
+    es_openrouter = proveedor == "openrouter"
+    # Este sufijo se agrega a los errores para que se vea con qué proveedor y modelo falló:
+    # alcanza para detectar, por ejemplo, que la key de Gemini está cargada pero el proveedor
+    # activo sigue siendo OpenRouter.
+    contexto = f'\n\n(Proveedor: {nombre_proveedor} · modelo: "{modelo}")'
 
     media_type = mimetypes.guess_type(path_imagen)[0] or "image/jpeg"
     if media_type not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
@@ -103,12 +110,15 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
         raise IAImportError(
             "Se alcanzó el límite de uso gratuito de la IA (error 429).\n\n"
             "Esperá un minuto y probá de nuevo (la capa gratis permite pocas fotos por minuto "
-            "y un tope por día). Con OpenRouter también podés cargar crédito."
+            "y un tope por día)."
+            + (" Con OpenRouter también podés cargar crédito." if es_openrouter else "")
+            + contexto
         ) from exc
     except openai.AuthenticationError as exc:
         raise IAImportError(
             "La API key de la IA no es válida. Podés cambiarla desde el menú "
-            "Configuración > Configurar IA."
+            "Configuración > Configurar IA. Chequeá que el proveedor elegido sea el de tu key."
+            + contexto
         ) from exc
     except openai.APITimeoutError as exc:
         raise IAImportError(
@@ -116,14 +126,24 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
         ) from exc
     except openai.APIConnectionError as exc:
         raise IAImportError(
-            "No hay conexión a internet (o no se pudo contactar OpenRouter). Intentá de nuevo."
+            f"No hay conexión a internet (o no se pudo contactar a {nombre_proveedor}). Intentá de nuevo."
         ) from exc
     except openai.NotFoundError as exc:
+        if es_openrouter:
+            ayuda = (
+                "los modelos gratis rotan seguido. Cambiá el modelo desde Configuración > "
+                "Configurar IA (lista de modelos con visión disponibles ahora: "
+                'openrouter.ai/models, filtrá por "image input" y "free").'
+            )
+        else:
+            ayuda = (
+                "revisá el nombre en Configuración > Configurar IA (el recomendado es "
+                f'"{config.PROVEEDORES_IA[proveedor]["modelo_default"]}"). Si ese nombre es el '
+                "correcto, chequeá que el proveedor elegido sea el de tu key."
+            )
         raise IAImportError(
-            f'El modelo configurado ("{modelo}") ya no está disponible en OpenRouter — los '
-            "modelos gratis rotan seguido. Cambiá el modelo desde Configuración > Configurar "
-            "IA (lista de modelos con visión disponibles ahora: openrouter.ai/models, filtrá "
-            'por "image input" y "free").'
+            f'El modelo configurado ("{modelo}") no está disponible en {nombre_proveedor}: '
+            f"{ayuda}{contexto}"
         ) from exc
     except openai.APIStatusError as exc:
         if exc.status_code == 402:
@@ -133,9 +153,11 @@ def extraer_candidatos(path_imagen: str, instruccion: str) -> list[FilaImport]:
                 "alcanza para muchísimas fotos), o usá un modelo gratis (con :free al final "
                 "del nombre) desde Configuración > Configurar IA."
             ) from exc
-        raise IAImportError(f"Error al consultar la IA (código {exc.status_code}): {exc}") from exc
+        raise IAImportError(
+            f"Error al consultar la IA (código {exc.status_code}): {exc}{contexto}"
+        ) from exc
     except Exception as exc:  # noqa: BLE001 - cubrimos toda la superficie de errores del SDK
-        raise IAImportError(f"Error al consultar la IA: {exc}") from exc
+        raise IAImportError(f"Error al consultar la IA: {exc}{contexto}") from exc
 
     texto_respuesta = respuesta.choices[0].message.content or ""
     datos = _extraer_json(texto_respuesta)
